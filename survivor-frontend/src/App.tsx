@@ -47,6 +47,14 @@ interface GameSettings {
   picks_locked: boolean
 }
 
+interface GameResult {
+  id: string
+  week: number
+  winning_team: string
+  losing_team: string
+  created_at: string
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'))
@@ -64,6 +72,9 @@ function App() {
   const [newPlayerName, setNewPlayerName] = useState('')
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState('')
+  const [gameResults, setGameResults] = useState<GameResult[]>([])
+  const [winningTeam, setWinningTeam] = useState('')
+  const [losingTeam, setLosingTeam] = useState('')
 
   useEffect(() => {
     if (token) {
@@ -73,6 +84,13 @@ function App() {
       fetchLeaderboard()
     }
   }, [token])
+
+  useEffect(() => {
+    if (user?.role === 'admin' && gameSettings?.current_week) {
+      fetchUnderdogTeams(gameSettings.current_week)
+      fetchGameResults()
+    }
+  }, [user, gameSettings?.current_week])
 
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const headers: Record<string, string> = {
@@ -257,6 +275,93 @@ function App() {
         return <Badge className="bg-yellow-500">Redemption</Badge>
       default:
         return <Badge>{status}</Badge>
+    }
+  }
+
+  const fetchGameResults = async () => {
+    try {
+      const response = await apiCall(`/admin/game-results/${gameSettings?.current_week || 1}`)
+      setGameResults(response)
+    } catch (err) {
+      console.error('Failed to fetch game results:', err)
+    }
+  }
+
+  const recordGameResult = async () => {
+    if (!winningTeam || !losingTeam) {
+      setError('Please select both winning and losing teams')
+      return
+    }
+    
+    if (winningTeam === losingTeam) {
+      setError('Winning and losing teams cannot be the same')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await apiCall('/admin/record-result', {
+        method: 'POST',
+        body: JSON.stringify({
+          winning_team: winningTeam,
+          losing_team: losingTeam
+        })
+      })
+      setSuccess('Game result recorded successfully')
+      setWinningTeam('')
+      setLosingTeam('')
+      fetchGameResults()
+    } catch (err: any) {
+      setError(err.message || 'Failed to record game result')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const processWeekResults = async () => {
+    setLoading(true)
+    try {
+      const response = await apiCall('/admin/process-week-results', {
+        method: 'POST'
+      })
+      setSuccess(`Processed week results: ${response.total_eliminated} players eliminated`)
+      fetchLeaderboard()
+    } catch (err: any) {
+      setError(err.message || 'Failed to process week results')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const advanceWeek = async () => {
+    setLoading(true)
+    try {
+      await apiCall('/admin/advance-week', {
+        method: 'POST'
+      })
+      setSuccess('Advanced to next week')
+      fetchGameSettings()
+      fetchGameResults()
+    } catch (err: any) {
+      setError(err.message || 'Failed to advance week')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const togglePicksLock = async () => {
+    setLoading(true)
+    try {
+      const endpoint = gameSettings?.picks_locked ? '/admin/unlock-picks' : '/admin/lock-picks'
+      await apiCall(endpoint, {
+        method: 'POST'
+      })
+      setSuccess(`Picks ${gameSettings?.picks_locked ? 'unlocked' : 'locked'}`)
+      fetchGameSettings()
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle picks lock')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -578,15 +683,86 @@ function App() {
                   <CardDescription>Manage the survivor league</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <Button variant="outline">
-                        Advance Week
-                      </Button>
-                      <Button variant="outline">
-                        {gameSettings?.picks_locked ? 'Unlock Picks' : 'Lock Picks'}
+                  <div className="space-y-6">
+                    {/* Week Management */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Week Management</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Button variant="outline" onClick={advanceWeek} disabled={loading}>
+                          Advance Week
+                        </Button>
+                        <Button variant="outline" onClick={togglePicksLock} disabled={loading}>
+                          {gameSettings?.picks_locked ? 'Unlock Picks' : 'Lock Picks'}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Game Results */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Record Game Results (Week {gameSettings?.current_week})</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Winning Team</Label>
+                          <Select value={winningTeam} onValueChange={setWinningTeam}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select winning team" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teams.map((team) => (
+                                <SelectItem key={team} value={team}>
+                                  {team}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Losing Team</Label>
+                          <Select value={losingTeam} onValueChange={setLosingTeam}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select losing team" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teams.map((team) => (
+                                <SelectItem key={team} value={team}>
+                                  {team}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Button onClick={recordGameResult} disabled={loading || !winningTeam || !losingTeam}>
+                        Record Game Result
                       </Button>
                     </div>
+
+                    {/* Current Week Results */}
+                    {gameResults.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">Week {gameSettings?.current_week} Results</h3>
+                        <div className="space-y-2">
+                          {gameResults.map((result) => (
+                            <div key={result.id} className="flex items-center justify-between p-3 border rounded-lg">
+                              <span className="font-medium">{result.winning_team} beat {result.losing_team}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Process Results */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Process Week</h3>
+                      <Button onClick={processWeekResults} disabled={loading} className="w-full">
+                        Process Week Results & Eliminate Players
+                      </Button>
+                      <p className="text-sm text-gray-600">
+                        This will automatically eliminate players who picked losing teams
+                      </p>
+                    </div>
+
+                    {/* Underdog Teams */}
                     <div className="space-y-2">
                       <Label>Underdog Teams (Week {gameSettings?.current_week})</Label>
                       <div className="flex flex-wrap gap-2">

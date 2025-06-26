@@ -64,6 +64,13 @@ class UnderdogTeam(BaseModel):
     team: str
     week: int
 
+class GameResult(BaseModel):
+    id: str
+    week: int
+    winning_team: str
+    losing_team: str
+    created_at: datetime
+
 class GameSettings(BaseModel):
     current_week: int = 1
     entry_fee: int = 35
@@ -94,10 +101,15 @@ class RedemptionPickRequest(BaseModel):
 class BuybackRequest(BaseModel):
     week: int
 
+class RecordResultRequest(BaseModel):
+    winning_team: str
+    losing_team: str
+
 users_db: Dict[str, User] = {}
 players_db: Dict[str, Player] = {}
 picks_db: List[WeeklyPick] = []
 underdog_teams_db: List[UnderdogTeam] = []
+game_results_db: List[GameResult] = []
 game_settings = GameSettings()
 
 NFL_TEAMS = [
@@ -375,6 +387,106 @@ async def get_leaderboard():
     ))
     
     return standings
+
+@app.post("/admin/record-result")
+async def record_game_result(request: RecordResultRequest, admin: User = Depends(require_admin)):
+    if request.winning_team not in NFL_TEAMS or request.losing_team not in NFL_TEAMS:
+        raise HTTPException(status_code=400, detail="Invalid team")
+    
+    if request.winning_team == request.losing_team:
+        raise HTTPException(status_code=400, detail="Teams cannot be the same")
+    
+    existing_result = next((
+        result for result in game_results_db 
+        if result.week == game_settings.current_week and 
+        ((result.winning_team == request.winning_team and result.losing_team == request.losing_team) or
+         (result.winning_team == request.losing_team and result.losing_team == request.winning_team))
+    ), None)
+    
+    if existing_result:
+        raise HTTPException(status_code=400, detail="Result already recorded for these teams this week")
+    
+    result_id = str(uuid.uuid4())
+    game_result = GameResult(
+        id=result_id,
+        week=game_settings.current_week,
+        winning_team=request.winning_team,
+        losing_team=request.losing_team,
+        created_at=datetime.now()
+    )
+    game_results_db.append(game_result)
+    
+    return game_result
+
+@app.post("/admin/process-week-results")
+async def process_week_results(admin: User = Depends(require_admin)):
+    """Process all picks for the current week and eliminate players with incorrect picks"""
+    current_week = game_settings.current_week
+    
+    week_picks = [pick for pick in picks_db if pick.week == current_week]
+    
+    week_results = [result for result in game_results_db if result.week == current_week]
+    
+    eliminated_players = []
+    processed_picks = 0
+    
+    for pick in week_picks:
+        player = players_db.get(pick.player_id)
+        if not player or player.status == PlayerStatus.ELIMINATED:
+            continue
+            
+        team_lost = False
+        for result in week_results:
+            if result.losing_team == pick.team:
+                team_lost = True
+                break
+        
+        if team_lost:
+            if player.status == PlayerStatus.REDEMPTION:
+                player.status = PlayerStatus.ELIMINATED
+                player.eliminated_week = current_week
+            else:
+                player.status = PlayerStatus.REDEMPTION
+                player.eliminated_week = current_week
+                player.redemption_visits += 1
+            
+            players_db[pick.player_id] = player
+            eliminated_players.append({
+                "player_id": player.id,
+                "entry_name": player.entry_name,
+                "picked_team": pick.team,
+                "new_status": player.status
+            })
+        
+        processed_picks += 1
+    
+    return {
+        "message": f"Processed {processed_picks} picks for week {current_week}",
+        "eliminated_players": eliminated_players,
+        "total_eliminated": len(eliminated_players)
+    }
+
+@app.get("/admin/game-results/{week}")
+async def get_week_results(week: int):
+    """Get all game results for a specific week"""
+    return [result for result in game_results_db if result.week == week]
+
+@app.get("/admin/game-results")
+async def get_all_results():
+    """Get all game results"""
+    return game_results_db
+
+@app.delete("/admin/game-results/{result_id}")
+async def delete_game_result(result_id: str, admin: User = Depends(require_admin)):
+    """Delete a game result (in case of mistakes)"""
+    global game_results_db
+    original_length = len(game_results_db)
+    game_results_db = [result for result in game_results_db if result.id != result_id]
+    
+    if len(game_results_db) == original_length:
+        raise HTTPException(status_code=404, detail="Game result not found")
+    
+    return {"message": "Game result deleted"}
 
 @app.get("/teams")
 async def get_teams():
