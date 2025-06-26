@@ -1,0 +1,622 @@
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+interface User {
+  id: string
+  username: string
+  role: 'admin' | 'player'
+}
+
+interface Player {
+  id: string
+  user_id: string
+  entry_name: string
+  status: 'active' | 'eliminated' | 'redemption'
+  eliminated_week?: number
+  redemption_visits: number
+  buybacks: number
+  entry_fee_paid: boolean
+}
+
+
+interface LeaderboardEntry {
+  player_id: string
+  entry_name: string
+  username: string
+  status: string
+  weeks_survived: number
+  redemption_visits: number
+  buybacks: number
+  eliminated_week?: number
+}
+
+interface GameSettings {
+  current_week: number
+  entry_fee: number
+  buyback_multiplier: number
+  picks_locked: boolean
+}
+
+function App() {
+  const [user, setUser] = useState<User | null>(null)
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'))
+  const [myPlayers, setMyPlayers] = useState<Player[]>([])
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [teams, setTeams] = useState<string[]>([])
+  const [gameSettings, setGameSettings] = useState<GameSettings | null>(null)
+  const [underdogTeams, setUnderdogTeams] = useState<string[]>([])
+  const [error, setError] = useState<string>('')
+  const [success, setSuccess] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' })
+  const [newPlayerName, setNewPlayerName] = useState('')
+  const [selectedTeam, setSelectedTeam] = useState('')
+  const [selectedPlayer, setSelectedPlayer] = useState('')
+
+  useEffect(() => {
+    if (token) {
+      fetchUserData()
+      fetchTeams()
+      fetchGameSettings()
+      fetchLeaderboard()
+    }
+  }, [token])
+
+  const apiCall = async (endpoint: string, options: RequestInit = {}) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+
+    if (options.headers) {
+      Object.assign(headers, options.headers)
+    }
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new Error(errorData.detail || 'Request failed')
+    }
+
+    return response.json()
+  }
+
+  const fetchUserData = async () => {
+    try {
+      const playersData = await apiCall('/players/me')
+      setMyPlayers(playersData)
+    } catch (err) {
+      console.error('Failed to fetch user data:', err)
+      logout()
+    }
+  }
+
+  const fetchTeams = async () => {
+    try {
+      const teamsData = await apiCall('/teams')
+      setTeams(teamsData)
+    } catch (err) {
+      console.error('Failed to fetch teams:', err)
+    }
+  }
+
+  const fetchGameSettings = async () => {
+    try {
+      const settings = await apiCall('/admin/settings')
+      setGameSettings(settings)
+      if (settings.current_week) {
+        fetchUnderdogTeams(settings.current_week)
+      }
+    } catch (err) {
+      console.error('Failed to fetch game settings:', err)
+    }
+  }
+
+  const fetchLeaderboard = async () => {
+    try {
+      const leaderboardData = await apiCall('/leaderboard')
+      setLeaderboard(leaderboardData)
+    } catch (err) {
+      console.error('Failed to fetch leaderboard:', err)
+    }
+  }
+
+  const fetchUnderdogTeams = async (week: number) => {
+    try {
+      const underdogs = await apiCall(`/admin/underdog-teams/${week}`)
+      setUnderdogTeams(underdogs)
+    } catch (err) {
+      console.error('Failed to fetch underdog teams:', err)
+    }
+  }
+
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    try {
+      const response = await apiCall('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(loginForm),
+      })
+
+      setToken(response.token)
+      setUser(response.user)
+      localStorage.setItem('token', response.token)
+      setSuccess('Logged in successfully!')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const register = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    try {
+      const response = await apiCall('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(registerForm),
+      })
+
+      setToken(response.token)
+      setUser(response.user)
+      localStorage.setItem('token', response.token)
+      setSuccess('Registered successfully!')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const logout = () => {
+    setToken(null)
+    setUser(null)
+    localStorage.removeItem('token')
+    setMyPlayers([])
+    setLeaderboard([])
+  }
+
+  const createPlayer = async () => {
+    if (!newPlayerName.trim()) return
+
+    setLoading(true)
+    setError('')
+
+    try {
+      await apiCall('/players', {
+        method: 'POST',
+        body: JSON.stringify({ entry_name: newPlayerName }),
+      })
+
+      setNewPlayerName('')
+      setSuccess('Player entry created successfully!')
+      fetchUserData()
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create player')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const makePick = async () => {
+    if (!selectedPlayer || !selectedTeam) return
+
+    setLoading(true)
+    setError('')
+
+    try {
+      await apiCall(`/players/${selectedPlayer}/picks`, {
+        method: 'POST',
+        body: JSON.stringify({ team: selectedTeam }),
+      })
+
+      setSelectedTeam('')
+      setSuccess('Pick submitted successfully!')
+      fetchUserData()
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit pick')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <Badge className="bg-green-500">Active</Badge>
+      case 'eliminated':
+        return <Badge className="bg-red-500">Eliminated</Badge>
+      case 'redemption':
+        return <Badge className="bg-yellow-500">Redemption</Badge>
+      default:
+        return <Badge>{status}</Badge>
+    }
+  }
+
+  if (!token || !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold text-gray-900">Survivor League</CardTitle>
+            <CardDescription>Welcome to the NFL Survivor League</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Login</TabsTrigger>
+                <TabsTrigger value="register">Register</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="login">
+                <form onSubmit={login} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                      id="username"
+                      type="text"
+                      value={loginForm.username}
+                      onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={loginForm.password}
+                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? 'Logging in...' : 'Login'}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="register">
+                <form onSubmit={register} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reg-username">Username</Label>
+                    <Input
+                      id="reg-username"
+                      type="text"
+                      value={registerForm.username}
+                      onChange={(e) => setRegisterForm({ ...registerForm, username: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={registerForm.email}
+                      onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reg-password">Password</Label>
+                    <Input
+                      id="reg-password"
+                      type="password"
+                      value={registerForm.password}
+                      onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? 'Registering...' : 'Register'}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+
+            {error && (
+              <Alert className="mt-4 border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {success && (
+              <Alert className="mt-4 border-green-200 bg-green-50">
+                <AlertDescription className="text-green-800">{success}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-2">
+              <Trophy className="h-8 w-8 text-blue-600" />
+              <h1 className="text-xl font-bold text-gray-900">Survivor League</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">Welcome, {user.username}</span>
+              {user.role === 'admin' && (
+                <Badge className="bg-purple-500">Admin</Badge>
+              )}
+              <Button variant="outline" size="sm" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs defaultValue="dashboard" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="picks">Make Picks</TabsTrigger>
+            <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+            {user.role === 'admin' && <TabsTrigger value="admin">Admin</TabsTrigger>}
+          </TabsList>
+
+          <TabsContent value="dashboard" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Calendar className="h-5 w-5" />
+                    <span>Current Week</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-600">
+                    {gameSettings?.current_week || 1}
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Picks {gameSettings?.picks_locked ? 'Locked' : 'Open'}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Users className="h-5 w-5" />
+                    <span>My Entries</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-green-600">
+                    {myPlayers.length}
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Active entries in the league
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Entry Fee</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-purple-600">
+                    ${gameSettings?.entry_fee || 35}
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Per entry
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>My Players</CardTitle>
+                <CardDescription>Manage your survivor league entries</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex space-x-2">
+                    <Input
+                      placeholder="Entry name (e.g., John 1, John 2)"
+                      value={newPlayerName}
+                      onChange={(e) => setNewPlayerName(e.target.value)}
+                    />
+                    <Button onClick={createPlayer} disabled={loading}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Entry
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {myPlayers.map((player) => (
+                      <div key={player.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <span className="font-medium">{player.entry_name}</span>
+                          {getStatusBadge(player.status)}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Redemptions: {player.redemption_visits} | Buybacks: {player.buybacks}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="picks" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Make Your Pick - Week {gameSettings?.current_week}</CardTitle>
+                <CardDescription>
+                  {gameSettings?.picks_locked 
+                    ? 'Picks are currently locked' 
+                    : 'Select a team you think will win this week'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Select Player Entry</Label>
+                    <Select value={selectedPlayer} onValueChange={setSelectedPlayer}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose your entry" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {myPlayers.filter(p => p.status === 'active').map((player) => (
+                          <SelectItem key={player.id} value={player.id}>
+                            {player.entry_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Select Team</Label>
+                    <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((team) => (
+                          <SelectItem key={team} value={team}>
+                            {team}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button 
+                    onClick={makePick} 
+                    disabled={loading || !selectedPlayer || !selectedTeam || gameSettings?.picks_locked}
+                    className="w-full"
+                  >
+                    {loading ? 'Submitting...' : 'Submit Pick'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="leaderboard" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Leaderboard</CardTitle>
+                <CardDescription>Current standings and elimination status</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {leaderboard.map((entry, index) => (
+                    <div key={entry.player_id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <span className="font-bold text-lg w-8">#{index + 1}</span>
+                        <div>
+                          <div className="font-medium">{entry.entry_name}</div>
+                          <div className="text-sm text-gray-600">@{entry.username}</div>
+                        </div>
+                        {getStatusBadge(entry.status)}
+                      </div>
+                      <div className="text-right text-sm">
+                        <div>Weeks: {entry.weeks_survived}</div>
+                        <div className="text-gray-600">
+                          R: {entry.redemption_visits} | B: {entry.buybacks}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {user.role === 'admin' && (
+            <TabsContent value="admin" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Settings className="h-5 w-5" />
+                    <span>Admin Controls</span>
+                  </CardTitle>
+                  <CardDescription>Manage the survivor league</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <Button variant="outline">
+                        Advance Week
+                      </Button>
+                      <Button variant="outline">
+                        {gameSettings?.picks_locked ? 'Unlock Picks' : 'Lock Picks'}
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Underdog Teams (Week {gameSettings?.current_week})</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {underdogTeams.map((team) => (
+                          <Badge key={team} variant="secondary">{team}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
+
+        {error && (
+          <Alert className="mt-4 border-red-200 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {success && (
+          <Alert className="mt-4 border-green-200 bg-green-50">
+            <AlertDescription className="text-green-800">{success}</AlertDescription>
+          </Alert>
+        )}
+      </main>
+    </div>
+  )
+}
+
+export default App
