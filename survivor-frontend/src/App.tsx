@@ -69,6 +69,8 @@ function App() {
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' })
+  const [resetPasswordForm, setResetPasswordForm] = useState({ username: '', email: '', newPassword: '' })
+  const [showResetPassword, setShowResetPassword] = useState(false)
   const [newPlayerName, setNewPlayerName] = useState('')
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState('')
@@ -217,6 +219,36 @@ function App() {
     localStorage.removeItem('token')
     setMyPlayers([])
     setLeaderboard([])
+  }
+
+  const resetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetPasswordForm.username || !resetPasswordForm.email || !resetPasswordForm.newPassword) {
+      setError('Please fill in all fields')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      await apiCall('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: resetPasswordForm.username,
+          email: resetPasswordForm.email,
+          new_password: resetPasswordForm.newPassword
+        })
+      })
+      setSuccess('Password reset successfully! You can now login with your new password.')
+      setShowResetPassword(false)
+      setResetPasswordForm({ username: '', email: '', newPassword: '' })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Password reset failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const createPlayer = async () => {
@@ -381,31 +413,95 @@ function App() {
               </TabsList>
 
               <TabsContent value="login">
-                <form onSubmit={login} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      type="text"
-                      value={loginForm.username}
-                      onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-                      required
-                    />
+                {!showResetPassword ? (
+                  <div className="space-y-4">
+                    <form onSubmit={login} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                          id="username"
+                          type="text"
+                          value={loginForm.username}
+                          onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="password">Password</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={loginForm.password}
+                          onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? 'Logging in...' : 'Login'}
+                      </Button>
+                    </form>
+                    <div className="text-center">
+                      <Button 
+                        variant="link" 
+                        onClick={() => setShowResetPassword(true)}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Forgot Password?
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={loginForm.password}
-                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                      required
-                    />
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <h3 className="text-lg font-semibold">Reset Password</h3>
+                      <p className="text-sm text-gray-600">Enter your username, email, and new password</p>
+                    </div>
+                    <form onSubmit={resetPassword} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reset-username">Username</Label>
+                        <Input
+                          id="reset-username"
+                          type="text"
+                          value={resetPasswordForm.username}
+                          onChange={(e) => setResetPasswordForm({ ...resetPasswordForm, username: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="reset-email">Email</Label>
+                        <Input
+                          id="reset-email"
+                          type="email"
+                          value={resetPasswordForm.email}
+                          onChange={(e) => setResetPasswordForm({ ...resetPasswordForm, email: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="reset-new-password">New Password</Label>
+                        <Input
+                          id="reset-new-password"
+                          type="password"
+                          value={resetPasswordForm.newPassword}
+                          onChange={(e) => setResetPasswordForm({ ...resetPasswordForm, newPassword: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? 'Resetting Password...' : 'Reset Password'}
+                      </Button>
+                    </form>
+                    <div className="text-center">
+                      <Button 
+                        variant="link" 
+                        onClick={() => setShowResetPassword(false)}
+                        className="text-sm text-gray-600 hover:text-gray-800"
+                      >
+                        Back to Login
+                      </Button>
+                    </div>
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? 'Logging in...' : 'Login'}
-                  </Button>
-                </form>
+                )}
               </TabsContent>
 
               <TabsContent value="register">

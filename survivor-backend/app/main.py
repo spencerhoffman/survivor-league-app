@@ -105,6 +105,11 @@ class RecordResultRequest(BaseModel):
     winning_team: str
     losing_team: str
 
+class ResetPasswordRequest(BaseModel):
+    username: str
+    email: str
+    new_password: str
+
 users_db: Dict[str, User] = {}
 players_db: Dict[str, Player] = {}
 picks_db: List[WeeklyPick] = []
@@ -187,6 +192,22 @@ async def login(request: LoginRequest):
             return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role}}
     
     raise HTTPException(status_code=401, detail="Invalid credentials")
+
+@app.post("/auth/reset-password")
+async def reset_password(request: ResetPasswordRequest):
+    user_found = None
+    for user in users_db.values():
+        if user.username == request.username and user.email == request.email:
+            user_found = user
+            break
+    
+    if not user_found:
+        raise HTTPException(status_code=404, detail="User not found with provided username and email")
+    
+    user_found.password_hash = hash_password(request.new_password)
+    users_db[user_found.id] = user_found
+    
+    return {"message": "Password reset successfully"}
 
 @app.post("/players")
 async def create_player(request: CreatePlayerRequest, user: User = Depends(get_current_user)):
