@@ -128,8 +128,8 @@ admin_id = str(uuid.uuid4())
 admin_user = User(
     id=admin_id,
     username="admin",
-    email="admin@survivorleague.com",
-    password_hash=hashlib.sha256(os.getenv("ADMIN_PASSWORD", "defaultpass").encode()).hexdigest(),
+    email="admin@example.com",
+    password_hash=hashlib.sha256(os.getenv("ADMIN_PASSWORD", "admin123").encode()).hexdigest(),
     role=UserRole.ADMIN,
     created_at=datetime.now()
 )
