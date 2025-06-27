@@ -57,6 +57,16 @@ interface GameResult {
   created_at: string
 }
 
+interface WeeklyPick {
+  id: string
+  player_id: string
+  week: number
+  team: string
+  is_redemption: boolean
+  is_underdog: boolean
+  created_at: string
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'))
@@ -80,6 +90,8 @@ function App() {
   const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | null>>({})
   const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
   const [redemptionPicks, setRedemptionPicks] = useState({ team1: '', team2: '', underdogTeam: '' })
+  const [currentPicks, setCurrentPicks] = useState<WeeklyPick[]>([])
+  const [editingPick, setEditingPick] = useState<string | null>(null)
 
   useEffect(() => {
     if (token) {
@@ -96,6 +108,14 @@ function App() {
       fetchGameResults()
     }
   }, [user, gameSettings?.current_week])
+
+  useEffect(() => {
+    if (selectedPlayer) {
+      fetchCurrentPicks(selectedPlayer)
+    } else {
+      setCurrentPicks([])
+    }
+  }, [selectedPlayer])
 
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const headers: Record<string, string> = {
@@ -291,6 +311,7 @@ function App() {
 
       setSelectedTeam('')
       setSuccess('Pick submitted successfully!')
+      fetchCurrentPicks(selectedPlayer)
       fetchUserData()
       fetchLeaderboard()
     } catch (err) {
@@ -323,20 +344,6 @@ function App() {
   }
 
 
-  const processWeekResults = async () => {
-    setLoading(true)
-    try {
-      const response = await apiCall('/admin/process-week-results', {
-        method: 'POST'
-      })
-      setSuccess(`Processed week results: ${response.total_eliminated} players eliminated`)
-      fetchLeaderboard()
-    } catch (err: any) {
-      setError(err.message || 'Failed to process week results')
-    } finally {
-      setLoading(false)
-    }
-  }
 
 
   const recordTableGameResults = async () => {
@@ -418,6 +425,7 @@ function App() {
       setSuccess('Redemption picks submitted successfully!')
       setRedemptionPicks({ team1: '', team2: '', underdogTeam: '' })
       setSelectedPlayer('')
+      fetchCurrentPicks(selectedPlayer)
       fetchLeaderboard()
     } catch (err: any) {
       setError(err.message || 'Failed to submit redemption picks')
@@ -428,6 +436,67 @@ function App() {
 
   const getAvailableTeams = (_playerId: string): string[] => {
     return teams
+  }
+
+  const fetchCurrentPicks = async (playerId: string) => {
+    if (!playerId) {
+      setCurrentPicks([])
+      return
+    }
+    
+    try {
+      const picks = await apiCall(`/players/${playerId}/picks/current-week`)
+      setCurrentPicks(picks)
+    } catch (err) {
+      console.error('Failed to fetch current picks:', err)
+      setCurrentPicks([])
+    }
+  }
+
+  const updatePick = async (pickId: string, team: string, isUnderdog: boolean = false) => {
+    if (!selectedPlayer) return
+
+    setLoading(true)
+    setError('')
+
+    try {
+      await apiCall(`/players/${selectedPlayer}/picks/${pickId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ team, is_underdog: isUnderdog }),
+      })
+
+      setSuccess('Pick updated successfully!')
+      setEditingPick(null)
+      fetchCurrentPicks(selectedPlayer)
+      fetchUserData()
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update pick')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const deletePick = async (pickId: string) => {
+    if (!selectedPlayer) return
+
+    setLoading(true)
+    setError('')
+
+    try {
+      await apiCall(`/players/${selectedPlayer}/picks/${pickId}`, {
+        method: 'DELETE',
+      })
+
+      setSuccess('Pick deleted successfully!')
+      fetchCurrentPicks(selectedPlayer)
+      fetchUserData()
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete pick')
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (!token || !user) {
@@ -742,6 +811,64 @@ function App() {
                     </Select>
                   </div>
 
+                  {selectedPlayer && currentPicks.length > 0 && (
+                    <div className="space-y-4">
+                      <div className="border rounded-lg p-4 bg-gray-50">
+                        <h4 className="font-medium mb-3">Current Picks for Week {gameSettings?.current_week}</h4>
+                        <div className="space-y-2">
+                          {currentPicks.map((pick) => (
+                            <div key={pick.id} className="flex items-center justify-between p-3 border rounded-lg bg-white">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-medium">{pick.team}</span>
+                                {pick.is_redemption && <Badge variant="outline">Redemption</Badge>}
+                                {pick.is_underdog && <Badge variant="secondary">Underdog</Badge>}
+                              </div>
+                              {!gameSettings?.picks_locked && (
+                                <div className="flex space-x-2">
+                                  {editingPick === pick.id ? (
+                                    <div className="flex items-center space-x-2">
+                                      <Select 
+                                        value={pick.team} 
+                                        onValueChange={(team) => updatePick(pick.id, team, pick.is_underdog)}
+                                      >
+                                        <SelectTrigger className="w-32">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {teams.filter(team => 
+                                            team === pick.team || 
+                                            !currentPicks.some(p => p.id !== pick.id && p.team === team)
+                                          ).map((team) => (
+                                            <SelectItem key={team} value={team}>{team}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button size="sm" variant="outline" onClick={() => setEditingPick(null)}>
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex space-x-2">
+                                      <Button size="sm" variant="outline" onClick={() => setEditingPick(pick.id)}>
+                                        Edit
+                                      </Button>
+                                      <Button size="sm" variant="destructive" onClick={() => deletePick(pick.id)}>
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {gameSettings?.picks_locked && (
+                          <p className="text-sm text-gray-600 mt-2">Picks are locked and cannot be edited.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {selectedPlayer && myPlayers.find(p => p.id === selectedPlayer)?.status === 'redemption' ? (
                     <div className="space-y-4">
                       <Alert className="border-yellow-200 bg-yellow-50">
@@ -933,16 +1060,6 @@ function App() {
                       </div>
                     )}
 
-                    {/* Process Results */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Process Week</h3>
-                      <Button onClick={processWeekResults} disabled={loading} className="w-full">
-                        Process Week Results & Eliminate Players
-                      </Button>
-                      <p className="text-sm text-gray-600">
-                        This will automatically eliminate players who picked losing teams
-                      </p>
-                    </div>
 
                     {/* Underdog Teams */}
                     <div className="space-y-4">

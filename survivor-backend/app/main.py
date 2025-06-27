@@ -313,6 +313,60 @@ async def make_redemption_picks(player_id: str, request: RedemptionPickRequest, 
 async def get_player_picks(player_id: str):
     return [pick for pick in picks_db if pick.player_id == player_id]
 
+@app.put("/players/{player_id}/picks/{pick_id}")
+async def update_pick(player_id: str, pick_id: str, request: MakePickRequest, user: User = Depends(get_current_user)):
+    if player_id not in players_db:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player = players_db[player_id]
+    if player.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your player")
+    
+    if game_settings.picks_locked:
+        raise HTTPException(status_code=400, detail="Picks are locked for this week")
+    
+    pick = next((p for p in picks_db if p.id == pick_id and p.player_id == player_id), None)
+    if not pick:
+        raise HTTPException(status_code=404, detail="Pick not found")
+    
+    if request.team not in NFL_TEAMS:
+        raise HTTPException(status_code=400, detail="Invalid team")
+    
+    used_teams = [p.team for p in picks_db if p.player_id == player_id and p.id != pick_id]
+    if request.team in used_teams:
+        raise HTTPException(status_code=400, detail="Team already used")
+    
+    pick.team = request.team
+    pick.is_underdog = request.is_underdog
+    
+    return pick
+
+@app.delete("/players/{player_id}/picks/{pick_id}")
+async def delete_pick(player_id: str, pick_id: str, user: User = Depends(get_current_user)):
+    if player_id not in players_db:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player = players_db[player_id]
+    if player.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your player")
+    
+    if game_settings.picks_locked:
+        raise HTTPException(status_code=400, detail="Picks are locked for this week")
+    
+    global picks_db
+    original_length = len(picks_db)
+    picks_db = [p for p in picks_db if not (p.id == pick_id and p.player_id == player_id)]
+    
+    if len(picks_db) == original_length:
+        raise HTTPException(status_code=404, detail="Pick not found")
+    
+    return {"message": "Pick deleted"}
+
+@app.get("/players/{player_id}/picks/current-week")
+async def get_current_week_picks(player_id: str):
+    current_week = game_settings.current_week
+    return [pick for pick in picks_db if pick.player_id == player_id and pick.week == current_week]
+
 @app.post("/players/{player_id}/buyback")
 async def buyback(player_id: str, request: BuybackRequest, user: User = Depends(get_current_user)):
     if player_id not in players_db:
