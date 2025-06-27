@@ -67,8 +67,8 @@ class UnderdogTeam(BaseModel):
 class GameResult(BaseModel):
     id: str
     week: int
-    winning_team: str
-    losing_team: str
+    team: str
+    outcome: str  # "win", "loss", or "bye"
     created_at: datetime
 
 class GameSettings(BaseModel):
@@ -102,8 +102,8 @@ class BuybackRequest(BaseModel):
     week: int
 
 class RecordResultRequest(BaseModel):
-    winning_team: str
-    losing_team: str
+    team: str
+    outcome: str  # "win", "loss", or "bye"
 
 class ResetPasswordRequest(BaseModel):
     username: str
@@ -465,28 +465,24 @@ async def get_leaderboard():
 
 @app.post("/admin/record-result")
 async def record_game_result(request: RecordResultRequest, admin: User = Depends(require_admin)):
-    if request.winning_team not in NFL_TEAMS or request.losing_team not in NFL_TEAMS:
+    if request.team not in NFL_TEAMS:
         raise HTTPException(status_code=400, detail="Invalid team")
     
-    if request.winning_team == request.losing_team:
-        raise HTTPException(status_code=400, detail="Teams cannot be the same")
+    if request.outcome not in ["win", "loss", "bye"]:
+        raise HTTPException(status_code=400, detail="Invalid outcome. Must be 'win', 'loss', or 'bye'")
     
-    existing_result = next((
+    global game_results_db
+    game_results_db = [
         result for result in game_results_db 
-        if result.week == game_settings.current_week and 
-        ((result.winning_team == request.winning_team and result.losing_team == request.losing_team) or
-         (result.winning_team == request.losing_team and result.losing_team == request.winning_team))
-    ), None)
-    
-    if existing_result:
-        raise HTTPException(status_code=400, detail="Result already recorded for these teams this week")
+        if not (result.week == game_settings.current_week and result.team == request.team)
+    ]
     
     result_id = str(uuid.uuid4())
     game_result = GameResult(
         id=result_id,
         week=game_settings.current_week,
-        winning_team=request.winning_team,
-        losing_team=request.losing_team,
+        team=request.team,
+        outcome=request.outcome,
         created_at=datetime.now()
     )
     game_results_db.append(game_result)
@@ -512,7 +508,7 @@ async def process_week_results(admin: User = Depends(require_admin)):
             
         team_lost = False
         for result in week_results:
-            if result.losing_team == pick.team:
+            if result.team == pick.team and result.outcome == "loss":
                 team_lost = True
                 break
         

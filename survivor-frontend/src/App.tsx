@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -52,8 +51,8 @@ interface GameSettings {
 interface GameResult {
   id: string
   week: number
-  winning_team: string
-  losing_team: string
+  team: string
+  outcome: string
   created_at: string
 }
 
@@ -87,7 +86,7 @@ function App() {
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState('')
   const [gameResults, setGameResults] = useState<GameResult[]>([])
-  const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | null>>({})
+  const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | 'bye' | null>>({})
   const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
   const [redemptionPicks, setRedemptionPicks] = useState({ team1: '', team2: '', underdogTeam: '' })
   const [currentPicks, setCurrentPicks] = useState<WeeklyPick[]>([])
@@ -347,26 +346,23 @@ function App() {
 
 
   const recordTableGameResults = async () => {
-    const winners = Object.entries(teamResults).filter(([_, result]) => result === 'win').map(([team, _]) => team)
-    const losers = Object.entries(teamResults).filter(([_, result]) => result === 'loss').map(([team, _]) => team)
+    const teamsWithOutcomes = Object.entries(teamResults).filter(([_, outcome]) => outcome !== null)
     
-    if (winners.length === 0 || losers.length === 0) {
-      setError('Please select at least one winning team and one losing team')
+    if (teamsWithOutcomes.length === 0) {
+      setError('Please select an outcome for at least one team')
       return
     }
 
     setLoading(true)
     try {
-      for (const winner of winners) {
-        for (const loser of losers) {
-          await apiCall('/admin/record-result', {
-            method: 'POST',
-            body: JSON.stringify({
-              winning_team: winner,
-              losing_team: loser
-            })
+      for (const [team, outcome] of teamsWithOutcomes) {
+        await apiCall('/admin/record-result', {
+          method: 'POST',
+          body: JSON.stringify({
+            team: team,
+            outcome: outcome
           })
-        }
+        })
       }
       setSuccess('Game results recorded successfully')
       setTeamResults({})
@@ -1020,21 +1016,29 @@ function App() {
                               <TableRow key={team}>
                                 <TableCell className="font-medium">{team}</TableCell>
                                 <TableCell>
-                                  <RadioGroup
-                                    value={teamResults[team] || ''}
-                                    onValueChange={(value) => setTeamResults(prev => ({ ...prev, [team]: value as 'win' | 'loss' | null }))}
-                                  >
-                                    <div className="flex space-x-4">
-                                      <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="win" id={`${team}-win`} />
-                                        <Label htmlFor={`${team}-win`}>Win</Label>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="loss" id={`${team}-loss`} />
-                                        <Label htmlFor={`${team}-loss`}>Loss</Label>
-                                      </div>
-                                    </div>
-                                  </RadioGroup>
+                                  <div className="flex space-x-2">
+                                    <Button
+                                      size="sm"
+                                      variant={teamResults[team] === 'win' ? 'default' : 'outline'}
+                                      onClick={() => setTeamResults(prev => ({ ...prev, [team]: 'win' }))}
+                                    >
+                                      Win
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant={teamResults[team] === 'loss' ? 'destructive' : 'outline'}
+                                      onClick={() => setTeamResults(prev => ({ ...prev, [team]: 'loss' }))}
+                                    >
+                                      Loss
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant={teamResults[team] === 'bye' ? 'secondary' : 'outline'}
+                                      onClick={() => setTeamResults(prev => ({ ...prev, [team]: 'bye' }))}
+                                    >
+                                      Bye
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -1053,7 +1057,7 @@ function App() {
                         <div className="space-y-2">
                           {gameResults.map((result) => (
                             <div key={result.id} className="flex items-center justify-between p-3 border rounded-lg">
-                              <span className="font-medium">{result.winning_team} beat {result.losing_team}</span>
+                              <span className="font-medium">{result.team}: {result.outcome.toUpperCase()}</span>
                             </div>
                           ))}
                         </div>
