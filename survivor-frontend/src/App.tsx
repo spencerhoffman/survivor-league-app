@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -75,8 +77,9 @@ function App() {
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState('')
   const [gameResults, setGameResults] = useState<GameResult[]>([])
-  const [winningTeam, setWinningTeam] = useState('')
-  const [losingTeam, setLosingTeam] = useState('')
+  const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | null>>({})
+  const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
+  const [redemptionPicks, setRedemptionPicks] = useState({ team1: '', team2: '', underdogTeam: '' })
 
   useEffect(() => {
     if (token) {
@@ -319,36 +322,6 @@ function App() {
     }
   }
 
-  const recordGameResult = async () => {
-    if (!winningTeam || !losingTeam) {
-      setError('Please select both winning and losing teams')
-      return
-    }
-    
-    if (winningTeam === losingTeam) {
-      setError('Winning and losing teams cannot be the same')
-      return
-    }
-
-    setLoading(true)
-    try {
-      await apiCall('/admin/record-result', {
-        method: 'POST',
-        body: JSON.stringify({
-          winning_team: winningTeam,
-          losing_team: losingTeam
-        })
-      })
-      setSuccess('Game result recorded successfully')
-      setWinningTeam('')
-      setLosingTeam('')
-      fetchGameResults()
-    } catch (err: any) {
-      setError(err.message || 'Failed to record game result')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const processWeekResults = async () => {
     setLoading(true)
@@ -365,36 +338,96 @@ function App() {
     }
   }
 
-  const advanceWeek = async () => {
+
+  const recordTableGameResults = async () => {
+    const winners = Object.entries(teamResults).filter(([_, result]) => result === 'win').map(([team, _]) => team)
+    const losers = Object.entries(teamResults).filter(([_, result]) => result === 'loss').map(([team, _]) => team)
+    
+    if (winners.length === 0 || losers.length === 0) {
+      setError('Please select at least one winning team and one losing team')
+      return
+    }
+
     setLoading(true)
     try {
-      await apiCall('/admin/advance-week', {
-        method: 'POST'
-      })
-      setSuccess('Advanced to next week')
-      fetchGameSettings()
+      for (const winner of winners) {
+        for (const loser of losers) {
+          await apiCall('/admin/record-result', {
+            method: 'POST',
+            body: JSON.stringify({
+              winning_team: winner,
+              losing_team: loser
+            })
+          })
+        }
+      }
+      setSuccess('Game results recorded successfully')
+      setTeamResults({})
       fetchGameResults()
     } catch (err: any) {
-      setError(err.message || 'Failed to advance week')
+      setError(err.message || 'Failed to record game results')
     } finally {
       setLoading(false)
     }
   }
 
-  const togglePicksLock = async () => {
+  const saveUnderdogTeams = async () => {
+    const selectedUnderdogs = Object.entries(underdogTeamSelections)
+      .filter(([_, selected]) => selected)
+      .map(([team, _]) => team)
+
+    if (selectedUnderdogs.length === 0) {
+      setError('Please select at least one underdog team')
+      return
+    }
+
     setLoading(true)
     try {
-      const endpoint = gameSettings?.picks_locked ? '/admin/unlock-picks' : '/admin/lock-picks'
-      await apiCall(endpoint, {
-        method: 'POST'
-      })
-      setSuccess(`Picks ${gameSettings?.picks_locked ? 'unlocked' : 'locked'}`)
-      fetchGameSettings()
+      for (const team of selectedUnderdogs) {
+        await apiCall('/admin/underdog-teams', {
+          method: 'POST',
+          body: JSON.stringify({ team, week: gameSettings?.current_week })
+        })
+      }
+      setSuccess('Underdog teams saved successfully')
+      setUnderdogTeamSelections({})
+      fetchUnderdogTeams(gameSettings?.current_week || 1)
     } catch (err: any) {
-      setError(err.message || 'Failed to toggle picks lock')
+      setError(err.message || 'Failed to save underdog teams')
     } finally {
       setLoading(false)
     }
+  }
+
+  const makeRedemptionPicks = async () => {
+    if (!selectedPlayer || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam) {
+      setError('Please select all required picks for redemption round')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await apiCall(`/players/${selectedPlayer}/redemption-picks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          team1: redemptionPicks.team1,
+          team2: redemptionPicks.team2,
+          underdog_team: redemptionPicks.underdogTeam
+        })
+      })
+      setSuccess('Redemption picks submitted successfully!')
+      setRedemptionPicks({ team1: '', team2: '', underdogTeam: '' })
+      setSelectedPlayer('')
+      fetchLeaderboard()
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit redemption picks')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getAvailableTeams = (_playerId: string): string[] => {
+    return teams
   }
 
   if (!token || !user) {
@@ -700,38 +733,101 @@ function App() {
                         <SelectValue placeholder="Choose your entry" />
                       </SelectTrigger>
                       <SelectContent>
-                        {myPlayers.filter(p => p.status === 'active').map((player) => (
+                        {myPlayers.filter(p => p.status === 'active' || p.status === 'redemption').map((player) => (
                           <SelectItem key={player.id} value={player.id}>
-                            {player.entry_name}
+                            {player.entry_name} {player.status === 'redemption' && '(Redemption Round)'}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Select Team</Label>
-                    <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a team" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {teams.map((team) => (
-                          <SelectItem key={team} value={team}>
-                            {team}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {selectedPlayer && myPlayers.find(p => p.id === selectedPlayer)?.status === 'redemption' ? (
+                    <div className="space-y-4">
+                      <Alert className="border-yellow-200 bg-yellow-50">
+                        <AlertCircle className="h-4 w-4 text-yellow-600" />
+                        <AlertDescription className="text-yellow-800">
+                          <strong>Redemption Round:</strong> You must select 2 regular teams and 1 underdog team to continue.
+                        </AlertDescription>
+                      </Alert>
+                      
+                      <div className="space-y-2">
+                        <Label>First Team Pick</Label>
+                        <Select value={redemptionPicks.team1} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, team1: value }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose first team" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getAvailableTeams(selectedPlayer).map((team) => (
+                              <SelectItem key={team} value={team}>{team}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                  <Button 
-                    onClick={makePick} 
-                    disabled={loading || !selectedPlayer || !selectedTeam || gameSettings?.picks_locked}
-                    className="w-full"
-                  >
-                    {loading ? 'Submitting...' : 'Submit Pick'}
-                  </Button>
+                      <div className="space-y-2">
+                        <Label>Second Team Pick</Label>
+                        <Select value={redemptionPicks.team2} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, team2: value }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose second team" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getAvailableTeams(selectedPlayer).filter(team => team !== redemptionPicks.team1).map((team) => (
+                              <SelectItem key={team} value={team}>{team}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Underdog Team Pick</Label>
+                        <Select value={redemptionPicks.underdogTeam} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam: value }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose underdog team" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {underdogTeams.filter(team => team !== redemptionPicks.team1 && team !== redemptionPicks.team2).map((team) => (
+                              <SelectItem key={team} value={team}>{team}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <Button 
+                        onClick={makeRedemptionPicks} 
+                        disabled={loading || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam || gameSettings?.picks_locked}
+                        className="w-full"
+                      >
+                        {loading ? 'Submitting...' : 'Submit Redemption Picks'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Select Team</Label>
+                        <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a team" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {teams.map((team) => (
+                              <SelectItem key={team} value={team}>
+                                {team}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <Button 
+                        onClick={makePick} 
+                        disabled={loading || !selectedPlayer || !selectedTeam || gameSettings?.picks_locked}
+                        className="w-full"
+                      >
+                        {loading ? 'Submitting...' : 'Submit Pick'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -780,56 +876,46 @@ function App() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
-                    {/* Week Management */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Week Management</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <Button variant="outline" onClick={advanceWeek} disabled={loading}>
-                          Advance Week
-                        </Button>
-                        <Button variant="outline" onClick={togglePicksLock} disabled={loading}>
-                          {gameSettings?.picks_locked ? 'Unlock Picks' : 'Lock Picks'}
-                        </Button>
-                      </div>
-                    </div>
 
                     {/* Game Results */}
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold">Record Game Results (Week {gameSettings?.current_week})</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Winning Team</Label>
-                          <Select value={winningTeam} onValueChange={setWinningTeam}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select winning team" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {teams.map((team) => (
-                                <SelectItem key={team} value={team}>
-                                  {team}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Losing Team</Label>
-                          <Select value={losingTeam} onValueChange={setLosingTeam}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select losing team" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {teams.map((team) => (
-                                <SelectItem key={team} value={team}>
-                                  {team}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Team</TableHead>
+                              <TableHead>Result</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {teams.map((team) => (
+                              <TableRow key={team}>
+                                <TableCell className="font-medium">{team}</TableCell>
+                                <TableCell>
+                                  <RadioGroup
+                                    value={teamResults[team] || ''}
+                                    onValueChange={(value) => setTeamResults(prev => ({ ...prev, [team]: value as 'win' | 'loss' | null }))}
+                                  >
+                                    <div className="flex space-x-4">
+                                      <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="win" id={`${team}-win`} />
+                                        <Label htmlFor={`${team}-win`}>Win</Label>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="loss" id={`${team}-loss`} />
+                                        <Label htmlFor={`${team}-loss`}>Loss</Label>
+                                      </div>
+                                    </div>
+                                  </RadioGroup>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
-                      <Button onClick={recordGameResult} disabled={loading || !winningTeam || !losingTeam}>
-                        Record Game Result
+                      <Button onClick={recordTableGameResults} disabled={loading}>
+                        Record Selected Results
                       </Button>
                     </div>
 
@@ -859,13 +945,51 @@ function App() {
                     </div>
 
                     {/* Underdog Teams */}
-                    <div className="space-y-2">
-                      <Label>Underdog Teams (Week {gameSettings?.current_week})</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {underdogTeams.map((team) => (
-                          <Badge key={team} variant="secondary">{team}</Badge>
-                        ))}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Manage Underdog Teams (Week {gameSettings?.current_week})</h3>
+                      <div className="border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Team</TableHead>
+                              <TableHead>Underdog Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {teams.map((team) => (
+                              <TableRow key={team}>
+                                <TableCell className="font-medium">{team}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`underdog-${team}`}
+                                      checked={underdogTeamSelections[team] || underdogTeams.includes(team)}
+                                      onChange={(e) => setUnderdogTeamSelections(prev => ({ ...prev, [team]: e.target.checked }))}
+                                      className="rounded border-gray-300"
+                                    />
+                                    <Label htmlFor={`underdog-${team}`}>Underdog</Label>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
+                      <Button onClick={saveUnderdogTeams} disabled={loading}>
+                        Save Underdog Teams
+                      </Button>
+                      
+                      {underdogTeams.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>Current Underdog Teams (Week {gameSettings?.current_week})</Label>
+                          <div className="flex flex-wrap gap-2">
+                            {underdogTeams.map((team) => (
+                              <Badge key={team} variant="secondary">{team}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
