@@ -836,10 +836,11 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="picks">Make Picks</TabsTrigger>
             <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+            <TabsTrigger value="pot-tracker">Pot Tracker</TabsTrigger>
             {user.role === 'admin' && <TabsTrigger value="admin">Admin</TabsTrigger>}
           </TabsList>
 
@@ -1109,94 +1110,103 @@ function App() {
           </TabsContent>
 
           <TabsContent value="leaderboard" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Leaderboard</CardTitle>
-                    <CardDescription>Current standings and elimination status</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {leaderboard.map((entry, index) => (
-                        <div key={entry.player_id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <span className="font-bold text-lg w-8">#{index + 1}</span>
-                            <div>
-                              <div className="font-medium">{entry.entry_name}</div>
-                              <div className="text-sm text-gray-600">@{entry.username}</div>
-                            </div>
-                            {getStatusBadge(entry.status)}
+            <Card>
+              <CardHeader>
+                <CardTitle>Leaderboard</CardTitle>
+                <CardDescription>Current standings and elimination status</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {leaderboard.map((entry, index) => (
+                    <div key={entry.player_id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <span className="font-bold text-lg w-8">#{index + 1}</span>
+                        <div>
+                          <div className="font-medium">{entry.entry_name}</div>
+                          <div className="text-sm text-gray-600">@{entry.username}</div>
+                        </div>
+                        {getStatusBadge(entry.status)}
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right text-sm">
+                          <div>Weeks: {entry.weeks_survived}</div>
+                          <div className="text-gray-600">
+                            R: {entry.redemption_visits} | B: {entry.buybacks}
                           </div>
-                          <div className="flex items-center space-x-4">
-                            <div className="text-right text-sm">
-                              <div>Weeks: {entry.weeks_survived}</div>
-                              <div className="text-gray-600">
-                                R: {entry.redemption_visits} | B: {entry.buybacks}
-                              </div>
-                            </div>
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleBuyback(entry.player_id)}
-                                disabled={loading}
-                              >
-                                Buyback
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleUndo(entry.player_id)}
-                                disabled={loading}
-                              >
-                                Undo
-                              </Button>
-                            </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleBuyback(entry.player_id)}
+                            disabled={loading}
+                          >
+                            Buyback
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleUndo(entry.player_id)}
+                            disabled={loading}
+                          >
+                            Undo
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="pot-tracker" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Total Pot</CardTitle>
+                  <CardDescription>Combined contributions from all players</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-6 bg-green-50 rounded-lg border border-green-200">
+                    <div className="text-center">
+                      <div className="text-4xl font-bold text-green-800">
+                        ${leaderboard.reduce((total, entry) => total + (entry.financial_contribution || 0), 0).toFixed(2)}
+                      </div>
+                      <div className="text-lg text-green-600 mt-2">Total Pot</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Individual Contributions</CardTitle>
+                  <CardDescription>Breakdown by player</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {leaderboard
+                      .filter(entry => (entry.financial_contribution || 0) > 0)
+                      .sort((a, b) => (b.financial_contribution || 0) - (a.financial_contribution || 0))
+                      .map((entry) => (
+                        <div key={entry.player_id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <span className="font-medium">{entry.entry_name}</span>
+                            <div className="text-sm text-gray-600">@{entry.username}</div>
                           </div>
+                          <span className="text-lg font-semibold text-gray-800">${(entry.financial_contribution || 0).toFixed(2)}</span>
                         </div>
                       ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="lg:col-span-1">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Pot Tracker</CardTitle>
-                    <CardDescription>Total contributions and individual amounts</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-green-800">
-                            ${leaderboard.reduce((total, entry) => total + (entry.financial_contribution || 0), 0).toFixed(2)}
-                          </div>
-                          <div className="text-sm text-green-600">Total Pot</div>
-                        </div>
+                    {leaderboard.every(entry => (entry.financial_contribution || 0) === 0) && (
+                      <div className="text-center py-8">
+                        <div className="text-gray-500 text-lg">No contributions yet</div>
+                        <div className="text-sm text-gray-400 mt-2">Use Buyback or Undo buttons in the Leaderboard to add contributions</div>
                       </div>
-                      
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-gray-700">Individual Contributions</h4>
-                        {leaderboard
-                          .filter(entry => (entry.financial_contribution || 0) > 0)
-                          .sort((a, b) => (b.financial_contribution || 0) - (a.financial_contribution || 0))
-                          .map((entry) => (
-                            <div key={entry.player_id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                              <span className="text-sm font-medium">{entry.entry_name}</span>
-                              <span className="text-sm text-gray-600">${(entry.financial_contribution || 0).toFixed(2)}</span>
-                            </div>
-                          ))}
-                        {leaderboard.every(entry => (entry.financial_contribution || 0) === 0) && (
-                          <div className="text-sm text-gray-500 text-center py-4">No contributions yet</div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
