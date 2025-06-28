@@ -449,25 +449,31 @@ function App() {
   }
 
   const lockPicksAndAdvanceWeek = async () => {
-    if (!confirm('Are you sure you want to lock picks and advance to the next week? This action will prevent further pick changes for the current week.')) {
+    if (!confirm('Are you sure you want to process week results, lock picks, and advance to the next week? This will eliminate players who picked losing teams and prevent further pick changes for the current week.')) {
       return
     }
 
     setLoading(true)
     try {
+      const processResult = await apiCall('/admin/process-week-results', {
+        method: 'POST'
+      })
+      
       await apiCall('/admin/lock-picks', {
         method: 'POST'
       })
       await apiCall('/admin/advance-week', {
         method: 'POST'
       })
-      setSuccess('Picks locked and advanced to next week successfully!')
+      
+      setSuccess(`Week processed successfully! ${processResult.total_eliminated} players eliminated. Picks locked and advanced to next week.`)
       
       await fetchGameSettings()
+      await fetchLeaderboard()
       await fetchUnderdogTeams((gameSettings?.current_week || 1) + 1)
       await fetchGameResults()
     } catch (err: any) {
-      setError(err.message || 'Failed to lock picks and advance week')
+      setError(err.message || 'Failed to process week results and advance week')
     } finally {
       setLoading(false)
     }
