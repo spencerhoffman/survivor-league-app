@@ -50,6 +50,8 @@ class Player(BaseModel):
     redemption_visits: int = 0
     buybacks: int = 0
     entry_fee_paid: bool = False
+    financial_contribution: float = 0.0
+    eliminated_teams: List[str] = []  # Teams permanently eliminated from future picks
 
 class WeeklyPick(BaseModel):
     id: str
@@ -94,9 +96,8 @@ class MakePickRequest(BaseModel):
     is_underdog: bool = False
 
 class RedemptionPickRequest(BaseModel):
-    team1: str
-    team2: str
-    underdog_team: str
+    underdog_team1: str
+    underdog_team2: str
 
 class BuybackRequest(BaseModel):
     week: int
@@ -220,6 +221,10 @@ async def create_player(request: CreatePlayerRequest, user: User = Depends(get_c
     players_db[player_id] = player
     return player
 
+@app.get("/me")
+async def get_current_user_profile(user: User = Depends(get_current_user)):
+    return user
+
 @app.get("/players/me")
 async def get_my_players(user: User = Depends(get_current_user)):
     return [player for player in players_db.values() if player.user_id == user.id]
@@ -278,22 +283,26 @@ async def make_redemption_picks(player_id: str, request: RedemptionPickRequest, 
     if game_settings.picks_locked:
         raise HTTPException(status_code=400, detail="Picks are locked for this week")
     
-    teams = [request.team1, request.team2, request.underdog_team]
+    teams = [request.underdog_team1, request.underdog_team2]
     for team in teams:
         if team not in NFL_TEAMS:
             raise HTTPException(status_code=400, detail=f"Invalid team: {team}")
     
     used_teams = [pick.team for pick in picks_db if pick.player_id == player_id]
     for team in teams:
-        if team in used_teams:
-            raise HTTPException(status_code=400, detail=f"Team already used: {team}")
+        if team in used_teams or team in player.eliminated_teams:
+            raise HTTPException(status_code=400, detail=f"Team already used or eliminated: {team}")
     
     underdog_teams = [ut.team for ut in underdog_teams_db if ut.week == game_settings.current_week]
-    if request.underdog_team not in underdog_teams:
-        raise HTTPException(status_code=400, detail="Invalid underdog team")
+    for team in teams:
+        if team not in underdog_teams:
+            raise HTTPException(status_code=400, detail=f"Invalid underdog team: {team}")
+    
+    if request.underdog_team1 == request.underdog_team2:
+        raise HTTPException(status_code=400, detail="Must pick two different underdog teams")
     
     picks = []
-    for i, team in enumerate([request.team1, request.team2, request.underdog_team]):
+    for team in teams:
         pick_id = str(uuid.uuid4())
         pick = WeeklyPick(
             id=pick_id,
@@ -301,7 +310,7 @@ async def make_redemption_picks(player_id: str, request: RedemptionPickRequest, 
             week=game_settings.current_week,
             team=team,
             is_redemption=True,
-            is_underdog=(team == request.underdog_team),
+            is_underdog=True,  # All redemption picks are underdog picks
             created_at=datetime.now()
         )
         picks_db.append(pick)
@@ -333,8 +342,8 @@ async def update_pick(player_id: str, pick_id: str, request: MakePickRequest, us
         raise HTTPException(status_code=400, detail="Invalid team")
     
     used_teams = [p.team for p in picks_db if p.player_id == player_id and p.id != pick_id]
-    if request.team in used_teams:
-        raise HTTPException(status_code=400, detail="Team already used")
+    if request.team in used_teams or request.team in player.eliminated_teams:
+        raise HTTPException(status_code=400, detail="Team already used or eliminated")
     
     pick.team = request.team
     pick.is_underdog = request.is_underdog
@@ -382,13 +391,30 @@ async def buyback(player_id: str, request: BuybackRequest, user: User = Depends(
     if player.eliminated_week is None or request.week != player.eliminated_week + 1:
         raise HTTPException(status_code=400, detail="Can only buyback the week after elimination")
     
-    cost = game_settings.buyback_multiplier * request.week
+    cost = 35.0  # Fixed $35 contribution
     
     player.status = PlayerStatus.ACTIVE
     player.buybacks += 1
+    player.financial_contribution += cost
     players_db[player_id] = player
     
     return {"message": f"Buyback successful for week {request.week}", "cost": cost}
+
+@app.post("/players/{player_id}/undo")
+async def undo_contribution(player_id: str, request: BuybackRequest, user: User = Depends(get_current_user)):
+    if player_id not in players_db:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player = players_db[player_id]
+    if player.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your player")
+    
+    cost = 35.0  # Fixed $35 contribution
+    
+    player.financial_contribution += cost
+    players_db[player_id] = player
+    
+    return {"message": f"Undo contribution successful for week {request.week}", "cost": cost}
 
 @app.post("/admin/underdog-teams")
 async def add_underdog_team(team: str, week: int, admin: User = Depends(require_admin)):
@@ -451,7 +477,8 @@ async def get_leaderboard():
             "weeks_survived": len([pick for pick in player_picks if not pick.is_redemption]),
             "redemption_visits": player.redemption_visits,
             "buybacks": player.buybacks,
-            "eliminated_week": player.eliminated_week
+            "eliminated_week": player.eliminated_week,
+            "financial_contribution": player.financial_contribution
         })
     
     standings.sort(key=lambda x: (
@@ -495,44 +522,70 @@ async def process_week_results(admin: User = Depends(require_admin)):
     current_week = game_settings.current_week
     
     week_picks = [pick for pick in picks_db if pick.week == current_week]
-    
     week_results = [result for result in game_results_db if result.week == current_week]
     
     eliminated_players = []
-    processed_picks = 0
+    processed_players = set()
     
+    player_picks = {}
     for pick in week_picks:
-        player = players_db.get(pick.player_id)
+        if pick.player_id not in player_picks:
+            player_picks[pick.player_id] = []
+        player_picks[pick.player_id].append(pick)
+    
+    for player_id, picks in player_picks.items():
+        player = players_db.get(player_id)
         if not player or player.status == PlayerStatus.ELIMINATED:
             continue
-            
-        team_lost = False
-        for result in week_results:
-            if result.team == pick.team and result.outcome == "loss":
-                team_lost = True
-                break
         
-        if team_lost:
-            if player.status == PlayerStatus.REDEMPTION:
+        if player.status == PlayerStatus.ACTIVE:
+            for pick in picks:
+                team_lost = any(result.team == pick.team and result.outcome == "loss" 
+                              for result in week_results)
+                if team_lost:
+                    player.status = PlayerStatus.REDEMPTION
+                    player.eliminated_week = current_week
+                    player.redemption_visits += 1
+                    players_db[player_id] = player
+                    eliminated_players.append({
+                        "player_id": player.id,
+                        "entry_name": player.entry_name,
+                        "picked_team": pick.team,
+                        "new_status": player.status
+                    })
+                    break  # Only need one losing pick to move to redemption
+        
+        elif player.status == PlayerStatus.REDEMPTION:
+            redemption_picks = [pick for pick in picks if pick.is_redemption]
+            correct_picks = 0
+            
+            for pick in redemption_picks:
+                if pick.team not in player.eliminated_teams:
+                    player.eliminated_teams.append(pick.team)
+                
+                team_won = any(result.team == pick.team and result.outcome == "win" 
+                             for result in week_results)
+                if team_won:
+                    correct_picks += 1
+            
+            if correct_picks == 0:
                 player.status = PlayerStatus.ELIMINATED
                 player.eliminated_week = current_week
+                players_db[player_id] = player
+                eliminated_players.append({
+                    "player_id": player.id,
+                    "entry_name": player.entry_name,
+                    "picked_team": "redemption picks",
+                    "new_status": player.status
+                })
             else:
-                player.status = PlayerStatus.REDEMPTION
-                player.eliminated_week = current_week
-                player.redemption_visits += 1
-            
-            players_db[pick.player_id] = player
-            eliminated_players.append({
-                "player_id": player.id,
-                "entry_name": player.entry_name,
-                "picked_team": pick.team,
-                "new_status": player.status
-            })
+                player.status = PlayerStatus.ACTIVE
+                players_db[player_id] = player
         
-        processed_picks += 1
+        processed_players.add(player_id)
     
     return {
-        "message": f"Processed {processed_picks} picks for week {current_week}",
+        "message": f"Processed {len(processed_players)} players for week {current_week}",
         "eliminated_players": eliminated_players,
         "total_eliminated": len(eliminated_players)
     }

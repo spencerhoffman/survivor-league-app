@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'https://app-xieyxwel.fly.dev'
 
 interface User {
   id: string
@@ -39,6 +39,7 @@ interface LeaderboardEntry {
   redemption_visits: number
   buybacks: number
   eliminated_week?: number
+  financial_contribution: number
 }
 
 interface GameSettings {
@@ -77,6 +78,7 @@ function App() {
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [initializing, setInitializing] = useState(true)
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' })
@@ -88,16 +90,19 @@ function App() {
   const [gameResults, setGameResults] = useState<GameResult[]>([])
   const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | 'bye' | null>>({})
   const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
-  const [redemptionPicks, setRedemptionPicks] = useState({ team1: '', team2: '', underdogTeam: '' })
+  const [redemptionPicks, setRedemptionPicks] = useState({ underdogTeam1: '', underdogTeam2: '' })
   const [currentPicks, setCurrentPicks] = useState<WeeklyPick[]>([])
   const [editingPick, setEditingPick] = useState<string | null>(null)
 
   useEffect(() => {
     if (token) {
+      fetchUserProfile()
       fetchUserData()
       fetchTeams()
       fetchGameSettings()
       fetchLeaderboard()
+    } else {
+      setInitializing(false)
     }
   }, [token])
 
@@ -140,6 +145,18 @@ function App() {
     }
 
     return response.json()
+  }
+
+  const fetchUserProfile = async () => {
+    try {
+      const userData = await apiCall('/me')
+      setUser(userData)
+    } catch (err) {
+      console.error('Failed to fetch user profile:', err)
+      logout()
+    } finally {
+      setInitializing(false)
+    }
   }
 
   const fetchUserData = async () => {
@@ -432,25 +449,31 @@ function App() {
   }
 
   const lockPicksAndAdvanceWeek = async () => {
-    if (!confirm('Are you sure you want to lock picks and advance to the next week? This action will prevent further pick changes for the current week.')) {
+    if (!confirm('Are you sure you want to process week results, lock picks, and advance to the next week? This will eliminate players who picked losing teams and prevent further pick changes for the current week.')) {
       return
     }
 
     setLoading(true)
     try {
+      const processResult = await apiCall('/admin/process-week-results', {
+        method: 'POST'
+      })
+      
       await apiCall('/admin/lock-picks', {
         method: 'POST'
       })
       await apiCall('/admin/advance-week', {
         method: 'POST'
       })
-      setSuccess('Picks locked and advanced to next week successfully!')
+      
+      setSuccess(`Week processed successfully! ${processResult.total_eliminated} players eliminated. Picks locked and advanced to next week.`)
       
       await fetchGameSettings()
+      await fetchLeaderboard()
       await fetchUnderdogTeams((gameSettings?.current_week || 1) + 1)
       await fetchGameResults()
     } catch (err: any) {
-      setError(err.message || 'Failed to lock picks and advance week')
+      setError(err.message || 'Failed to process week results and advance week')
     } finally {
       setLoading(false)
     }
@@ -486,8 +509,13 @@ function App() {
   }
 
   const makeRedemptionPicks = async () => {
-    if (!selectedPlayer || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam) {
-      setError('Please select all required picks for redemption round')
+    if (!selectedPlayer || !redemptionPicks.underdogTeam1 || !redemptionPicks.underdogTeam2) {
+      setError('Please select both underdog teams for redemption round')
+      return
+    }
+
+    if (redemptionPicks.underdogTeam1 === redemptionPicks.underdogTeam2) {
+      setError('Please select two different underdog teams')
       return
     }
 
@@ -496,13 +524,12 @@ function App() {
       await apiCall(`/players/${selectedPlayer}/redemption-picks`, {
         method: 'POST',
         body: JSON.stringify({
-          team1: redemptionPicks.team1,
-          team2: redemptionPicks.team2,
-          underdog_team: redemptionPicks.underdogTeam
+          underdog_team1: redemptionPicks.underdogTeam1,
+          underdog_team2: redemptionPicks.underdogTeam2
         })
       })
       setSuccess('Redemption picks submitted successfully!')
-      setRedemptionPicks({ team1: '', team2: '', underdogTeam: '' })
+      setRedemptionPicks({ underdogTeam1: '', underdogTeam2: '' })
       setSelectedPlayer('')
       fetchCurrentPicks(selectedPlayer)
       fetchLeaderboard()
@@ -576,6 +603,58 @@ function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleBuyback = async (playerId: string) => {
+    if (!gameSettings) return
+    
+    try {
+      setLoading(true)
+      setError('')
+      await apiCall(`/players/${playerId}/buyback`, {
+        method: 'POST',
+        body: JSON.stringify({
+          week: gameSettings.current_week
+        })
+      })
+      setSuccess('Buyback successful!')
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process buyback')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUndo = async (playerId: string) => {
+    if (!gameSettings) return
+    
+    try {
+      setLoading(true)
+      setError('')
+      await apiCall(`/players/${playerId}/undo`, {
+        method: 'POST',
+        body: JSON.stringify({
+          week: gameSettings.current_week
+        })
+      })
+      setSuccess('Undo contribution successful!')
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process undo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (initializing) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-lg font-medium text-gray-900">Loading...</div>
+        </div>
+      </div>
+    )
   }
 
   if (!token || !user) {
@@ -767,10 +846,11 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="picks">Make Picks</TabsTrigger>
             <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+            <TabsTrigger value="pot-tracker">Pot Tracker</TabsTrigger>
             {user.role === 'admin' && <TabsTrigger value="admin">Admin</TabsTrigger>}
           </TabsList>
 
@@ -953,15 +1033,15 @@ function App() {
                       <Alert className="border-yellow-200 bg-yellow-50">
                         <AlertCircle className="h-4 w-4 text-yellow-600" />
                         <AlertDescription className="text-yellow-800">
-                          <strong>Redemption Round:</strong> You must select 2 regular teams and 1 underdog team to continue.
+                          <strong>Redemption Round:</strong> You must select 2 different underdog teams to continue.
                         </AlertDescription>
                       </Alert>
                       
                       <div className="space-y-2">
-                        <Label>First Team Pick</Label>
-                        <Select value={redemptionPicks.team1} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, team1: value }))}>
+                        <Label>First Underdog Team</Label>
+                        <Select value={redemptionPicks.underdogTeam1} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam1: value }))}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Choose first team" />
+                            <SelectValue placeholder="Choose first underdog team" />
                           </SelectTrigger>
                           <SelectContent>
                             {getAvailableTeams(selectedPlayer).map((team) => (
@@ -972,36 +1052,23 @@ function App() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label>Second Team Pick</Label>
-                        <Select value={redemptionPicks.team2} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, team2: value }))}>
+                        <Label>Second Underdog Team</Label>
+                        <Select value={redemptionPicks.underdogTeam2} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam2: value }))}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Choose second team" />
+                            <SelectValue placeholder="Choose second underdog team" />
                           </SelectTrigger>
                           <SelectContent>
-                            {getAvailableTeams(selectedPlayer).filter(team => team !== redemptionPicks.team1).map((team) => (
+                            {underdogTeams.filter(team => team !== redemptionPicks.underdogTeam1).map((team) => (
                               <SelectItem key={team} value={team}>{team}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Underdog Team Pick</Label>
-                        <Select value={redemptionPicks.underdogTeam} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam: value }))}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose underdog team" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {underdogTeams.filter(team => team !== redemptionPicks.team1 && team !== redemptionPicks.team2).map((team) => (
-                              <SelectItem key={team} value={team}>{team}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
 
                       <Button 
                         onClick={makeRedemptionPicks} 
-                        disabled={loading || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam || gameSettings?.picks_locked}
+                        disabled={loading || !redemptionPicks.underdogTeam1 || !redemptionPicks.underdogTeam2 || gameSettings?.picks_locked}
                         className="w-full"
                       >
                         {loading ? 'Submitting...' : 'Submit Redemption Picks'}
@@ -1068,6 +1135,76 @@ function App() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="pot-tracker" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Total Pot</CardTitle>
+                  <CardDescription>Combined contributions from all players</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-6 bg-green-50 rounded-lg border border-green-200">
+                    <div className="text-center">
+                      <div className="text-4xl font-bold text-green-800">
+                        ${leaderboard.reduce((total, entry) => total + (entry.financial_contribution || 0), 0).toFixed(2)}
+                      </div>
+                      <div className="text-lg text-green-600 mt-2">Total Pot</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Individual Contributions</CardTitle>
+                  <CardDescription>Breakdown by player</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {leaderboard.length > 0 ? leaderboard
+                      .sort((a, b) => (b.financial_contribution || 0) - (a.financial_contribution || 0))
+                      .map((entry) => (
+                        <div key={entry.player_id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                          <div className="flex-1">
+                            <span className="font-medium">{entry.entry_name}</span>
+                            <div className="text-sm text-gray-600">@{entry.username}</div>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-lg font-semibold text-gray-800 min-w-[80px] text-right">
+                              ${(entry.financial_contribution || 0).toFixed(2)}
+                            </span>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleBuyback(entry.player_id)}
+                                disabled={loading}
+                              >
+                                Buyback
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleUndo(entry.player_id)}
+                                disabled={loading}
+                              >
+                                Undo
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )) : (
+                      <div className="text-center py-8">
+                        <div className="text-gray-500 text-lg">No players yet</div>
+                        <div className="text-sm text-gray-400 mt-2">Players will appear here once they join the league</div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {user.role === 'admin' && (
