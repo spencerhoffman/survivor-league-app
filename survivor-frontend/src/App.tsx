@@ -431,6 +431,60 @@ function App() {
     }
   }
 
+  const lockPicksAndAdvanceWeek = async () => {
+    if (!confirm('Are you sure you want to lock picks and advance to the next week? This action will prevent further pick changes for the current week.')) {
+      return
+    }
+
+    setLoading(true)
+    try {
+      await apiCall('/admin/lock-picks', {
+        method: 'POST'
+      })
+      await apiCall('/admin/advance-week', {
+        method: 'POST'
+      })
+      setSuccess('Picks locked and advanced to next week successfully!')
+      
+      await fetchGameSettings()
+      await fetchUnderdogTeams((gameSettings?.current_week || 1) + 1)
+      await fetchGameResults()
+    } catch (err: any) {
+      setError(err.message || 'Failed to lock picks and advance week')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const unlockPicksAndReturnToPreviousWeek = async () => {
+    if (!confirm('Are you sure you want to unlock picks and return to the previous week? This will allow pick changes again.')) {
+      return
+    }
+
+    setLoading(true)
+    try {
+      await apiCall('/admin/unlock-picks', {
+        method: 'POST'
+      })
+      
+      const currentWeek = gameSettings?.current_week || 1
+      if (currentWeek > 1) {
+        const newWeek = currentWeek - 1
+        setSuccess(`Picks unlocked and returned to week ${newWeek}. Note: Week decrement requires manual backend adjustment to week ${newWeek}.`)
+      } else {
+        setSuccess('Picks unlocked. Already at week 1, cannot go to previous week.')
+      }
+      
+      await fetchGameSettings()
+      await fetchUnderdogTeams(gameSettings?.current_week || 1)
+      await fetchGameResults()
+    } catch (err: any) {
+      setError(err.message || 'Failed to unlock picks and return to previous week')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const makeRedemptionPicks = async () => {
     if (!selectedPlayer || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam) {
       setError('Please select all required picks for redemption round')
@@ -1093,6 +1147,39 @@ function App() {
                       </div>
                     )}
 
+                    {/* Week Management */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Week Management</h3>
+                      <div className="p-4 border rounded-lg bg-blue-50">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-medium text-blue-800">Current Week: {gameSettings?.current_week}</h4>
+                              <p className="text-sm text-blue-700">
+                                Picks are currently {gameSettings?.picks_locked ? 'locked' : 'open'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex space-x-4">
+                            <Button 
+                              onClick={lockPicksAndAdvanceWeek} 
+                              disabled={loading}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {loading ? 'Processing...' : 'Lock Picks and Advance Week'}
+                            </Button>
+                            <Button 
+                              onClick={unlockPicksAndReturnToPreviousWeek} 
+                              disabled={loading || (gameSettings?.current_week || 1) <= 1}
+                              variant="outline"
+                              className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                            >
+                              {loading ? 'Processing...' : 'Unlock Picks and Return to Previous Week'}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
                     {/* Underdog Teams */}
                     <div className="space-y-4">
