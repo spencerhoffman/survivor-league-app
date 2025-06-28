@@ -50,6 +50,7 @@ class Player(BaseModel):
     redemption_visits: int = 0
     buybacks: int = 0
     entry_fee_paid: bool = False
+    financial_contribution: float = 0.0
 
 class WeeklyPick(BaseModel):
     id: str
@@ -220,6 +221,10 @@ async def create_player(request: CreatePlayerRequest, user: User = Depends(get_c
     players_db[player_id] = player
     return player
 
+@app.get("/me")
+async def get_current_user_profile(user: User = Depends(get_current_user)):
+    return user
+
 @app.get("/players/me")
 async def get_my_players(user: User = Depends(get_current_user)):
     return [player for player in players_db.values() if player.user_id == user.id]
@@ -386,9 +391,26 @@ async def buyback(player_id: str, request: BuybackRequest, user: User = Depends(
     
     player.status = PlayerStatus.ACTIVE
     player.buybacks += 1
+    player.financial_contribution += cost
     players_db[player_id] = player
     
     return {"message": f"Buyback successful for week {request.week}", "cost": cost}
+
+@app.post("/players/{player_id}/undo")
+async def undo_contribution(player_id: str, request: BuybackRequest, user: User = Depends(get_current_user)):
+    if player_id not in players_db:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player = players_db[player_id]
+    if player.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your player")
+    
+    cost = game_settings.buyback_multiplier * request.week
+    
+    player.financial_contribution += cost
+    players_db[player_id] = player
+    
+    return {"message": f"Undo contribution successful for week {request.week}", "cost": cost}
 
 @app.post("/admin/underdog-teams")
 async def add_underdog_team(team: str, week: int, admin: User = Depends(require_admin)):
@@ -451,7 +473,8 @@ async def get_leaderboard():
             "weeks_survived": len([pick for pick in player_picks if not pick.is_redemption]),
             "redemption_visits": player.redemption_visits,
             "buybacks": player.buybacks,
-            "eliminated_week": player.eliminated_week
+            "eliminated_week": player.eliminated_week,
+            "financial_contribution": player.financial_contribution
         })
     
     standings.sort(key=lambda x: (

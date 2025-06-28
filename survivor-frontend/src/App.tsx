@@ -39,6 +39,7 @@ interface LeaderboardEntry {
   redemption_visits: number
   buybacks: number
   eliminated_week?: number
+  financial_contribution: number
 }
 
 interface GameSettings {
@@ -77,6 +78,7 @@ function App() {
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [initializing, setInitializing] = useState(true)
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' })
@@ -94,10 +96,13 @@ function App() {
 
   useEffect(() => {
     if (token) {
+      fetchUserProfile()
       fetchUserData()
       fetchTeams()
       fetchGameSettings()
       fetchLeaderboard()
+    } else {
+      setInitializing(false)
     }
   }, [token])
 
@@ -140,6 +145,18 @@ function App() {
     }
 
     return response.json()
+  }
+
+  const fetchUserProfile = async () => {
+    try {
+      const userData = await apiCall('/me')
+      setUser(userData)
+    } catch (err) {
+      console.error('Failed to fetch user profile:', err)
+      logout()
+    } finally {
+      setInitializing(false)
+    }
   }
 
   const fetchUserData = async () => {
@@ -576,6 +593,58 @@ function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleBuyback = async (playerId: string) => {
+    if (!gameSettings) return
+    
+    try {
+      setLoading(true)
+      setError('')
+      await apiCall(`/players/${playerId}/buyback`, {
+        method: 'POST',
+        body: JSON.stringify({
+          week: gameSettings.current_week
+        })
+      })
+      setSuccess('Buyback successful!')
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process buyback')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUndo = async (playerId: string) => {
+    if (!gameSettings) return
+    
+    try {
+      setLoading(true)
+      setError('')
+      await apiCall(`/players/${playerId}/undo`, {
+        method: 'POST',
+        body: JSON.stringify({
+          week: gameSettings.current_week
+        })
+      })
+      setSuccess('Undo contribution successful!')
+      fetchLeaderboard()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process undo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (initializing) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-lg font-medium text-gray-900">Loading...</div>
+        </div>
+      </div>
+    )
   }
 
   if (!token || !user) {
@@ -1040,34 +1109,95 @@ function App() {
           </TabsContent>
 
           <TabsContent value="leaderboard" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Leaderboard</CardTitle>
-                <CardDescription>Current standings and elimination status</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {leaderboard.map((entry, index) => (
-                    <div key={entry.player_id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <span className="font-bold text-lg w-8">#{index + 1}</span>
-                        <div>
-                          <div className="font-medium">{entry.entry_name}</div>
-                          <div className="text-sm text-gray-600">@{entry.username}</div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Leaderboard</CardTitle>
+                    <CardDescription>Current standings and elimination status</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {leaderboard.map((entry, index) => (
+                        <div key={entry.player_id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <span className="font-bold text-lg w-8">#{index + 1}</span>
+                            <div>
+                              <div className="font-medium">{entry.entry_name}</div>
+                              <div className="text-sm text-gray-600">@{entry.username}</div>
+                            </div>
+                            {getStatusBadge(entry.status)}
+                          </div>
+                          <div className="flex items-center space-x-4">
+                            <div className="text-right text-sm">
+                              <div>Weeks: {entry.weeks_survived}</div>
+                              <div className="text-gray-600">
+                                R: {entry.redemption_visits} | B: {entry.buybacks}
+                              </div>
+                            </div>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleBuyback(entry.player_id)}
+                                disabled={loading}
+                              >
+                                Buyback
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleUndo(entry.player_id)}
+                                disabled={loading}
+                              >
+                                Undo
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                        {getStatusBadge(entry.status)}
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-1">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pot Tracker</CardTitle>
+                    <CardDescription>Total contributions and individual amounts</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-800">
+                            ${leaderboard.reduce((total, entry) => total + (entry.financial_contribution || 0), 0).toFixed(2)}
+                          </div>
+                          <div className="text-sm text-green-600">Total Pot</div>
+                        </div>
                       </div>
-                      <div className="text-right text-sm">
-                        <div>Weeks: {entry.weeks_survived}</div>
-                        <div className="text-gray-600">
-                          R: {entry.redemption_visits} | B: {entry.buybacks}
-                        </div>
+                      
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-gray-700">Individual Contributions</h4>
+                        {leaderboard
+                          .filter(entry => (entry.financial_contribution || 0) > 0)
+                          .sort((a, b) => (b.financial_contribution || 0) - (a.financial_contribution || 0))
+                          .map((entry) => (
+                            <div key={entry.player_id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                              <span className="text-sm font-medium">{entry.entry_name}</span>
+                              <span className="text-sm text-gray-600">${(entry.financial_contribution || 0).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        {leaderboard.every(entry => (entry.financial_contribution || 0) === 0) && (
+                          <div className="text-sm text-gray-500 text-center py-4">No contributions yet</div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </TabsContent>
 
           {user.role === 'admin' && (
