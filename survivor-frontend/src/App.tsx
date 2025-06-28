@@ -402,6 +402,35 @@ function App() {
     }
   }
 
+  const resetLeague = async () => {
+    if (!confirm('Are you sure you want to reset the entire league? This will delete ALL players, picks, results, and non-admin users. This action cannot be undone.')) {
+      return
+    }
+
+    setLoading(true)
+    try {
+      await apiCall('/admin/reset-league', {
+        method: 'POST'
+      })
+      setSuccess('League reset successfully! All data has been cleared.')
+      
+      setMyPlayers([])
+      setLeaderboard([])
+      setGameResults([])
+      setUnderdogTeams([])
+      setTeamResults({})
+      setCurrentPicks([])
+      setSelectedPlayer('')
+      
+      fetchGameSettings()
+      fetchLeaderboard()
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset league')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const makeRedemptionPicks = async () => {
     if (!selectedPlayer || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam) {
       setError('Please select all required picks for redemption round')
@@ -1111,6 +1140,28 @@ function App() {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Reset League */}
+                    <div className="space-y-4 pt-6 border-t border-red-200">
+                      <h3 className="text-lg font-semibold text-red-600">Danger Zone</h3>
+                      <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-red-800">Reset Entire League</h4>
+                          <p className="text-sm text-red-700">
+                            This will permanently delete all players, picks, game results, underdog teams, and non-admin users. 
+                            The league will be reset to Week 1 with default settings.
+                          </p>
+                          <Button 
+                            variant="destructive" 
+                            onClick={resetLeague} 
+                            disabled={loading}
+                            className="mt-2"
+                          >
+                            {loading ? 'Resetting...' : 'Reset League'}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

@@ -559,6 +559,40 @@ async def delete_game_result(result_id: str, admin: User = Depends(require_admin
     
     return {"message": "Game result deleted"}
 
+@app.post("/admin/reset-league")
+async def reset_league(admin: User = Depends(require_admin)):
+    """Reset all league data - players, picks, results, underdog teams"""
+    global players_db, picks_db, game_results_db, underdog_teams_db, game_settings
+    
+    admin_users = {user_id: user for user_id, user in users_db.items() if user.role == UserRole.ADMIN}
+    users_db.clear()
+    users_db.update(admin_users)
+    
+    players_db.clear()
+    picks_db.clear()
+    game_results_db.clear()
+    underdog_teams_db.clear()
+    
+    game_settings.current_week = 1
+    game_settings.entry_fee = 35
+    game_settings.buyback_multiplier = 3
+    game_settings.picks_locked = False
+    
+    return {
+        "message": "League reset successfully",
+        "cleared": {
+            "players": True,
+            "picks": True,
+            "game_results": True,
+            "underdog_teams": True,
+            "non_admin_users": True
+        },
+        "reset_settings": {
+            "current_week": game_settings.current_week,
+            "picks_locked": game_settings.picks_locked
+        }
+    }
+
 @app.get("/teams")
 async def get_teams():
     return NFL_TEAMS
