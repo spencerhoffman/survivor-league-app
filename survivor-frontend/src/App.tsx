@@ -90,7 +90,7 @@ function App() {
   const [gameResults, setGameResults] = useState<GameResult[]>([])
   const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | 'bye' | null>>({})
   const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
-  const [redemptionPicks, setRedemptionPicks] = useState({ team1: '', team2: '', underdogTeam: '' })
+  const [redemptionPicks, setRedemptionPicks] = useState({ underdogTeam1: '', underdogTeam2: '' })
   const [currentPicks, setCurrentPicks] = useState<WeeklyPick[]>([])
   const [editingPick, setEditingPick] = useState<string | null>(null)
 
@@ -509,8 +509,13 @@ function App() {
   }
 
   const makeRedemptionPicks = async () => {
-    if (!selectedPlayer || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam) {
-      setError('Please select all required picks for redemption round')
+    if (!selectedPlayer || !redemptionPicks.underdogTeam1 || !redemptionPicks.underdogTeam2) {
+      setError('Please select both underdog teams for redemption round')
+      return
+    }
+
+    if (redemptionPicks.underdogTeam1 === redemptionPicks.underdogTeam2) {
+      setError('Please select two different underdog teams')
       return
     }
 
@@ -519,13 +524,12 @@ function App() {
       await apiCall(`/players/${selectedPlayer}/redemption-picks`, {
         method: 'POST',
         body: JSON.stringify({
-          team1: redemptionPicks.team1,
-          team2: redemptionPicks.team2,
-          underdog_team: redemptionPicks.underdogTeam
+          underdog_team1: redemptionPicks.underdogTeam1,
+          underdog_team2: redemptionPicks.underdogTeam2
         })
       })
       setSuccess('Redemption picks submitted successfully!')
-      setRedemptionPicks({ team1: '', team2: '', underdogTeam: '' })
+      setRedemptionPicks({ underdogTeam1: '', underdogTeam2: '' })
       setSelectedPlayer('')
       fetchCurrentPicks(selectedPlayer)
       fetchLeaderboard()
@@ -1029,15 +1033,15 @@ function App() {
                       <Alert className="border-yellow-200 bg-yellow-50">
                         <AlertCircle className="h-4 w-4 text-yellow-600" />
                         <AlertDescription className="text-yellow-800">
-                          <strong>Redemption Round:</strong> You must select 2 regular teams and 1 underdog team to continue.
+                          <strong>Redemption Round:</strong> You must select 2 different underdog teams to continue.
                         </AlertDescription>
                       </Alert>
                       
                       <div className="space-y-2">
-                        <Label>First Team Pick</Label>
-                        <Select value={redemptionPicks.team1} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, team1: value }))}>
+                        <Label>First Underdog Team</Label>
+                        <Select value={redemptionPicks.underdogTeam1} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam1: value }))}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Choose first team" />
+                            <SelectValue placeholder="Choose first underdog team" />
                           </SelectTrigger>
                           <SelectContent>
                             {getAvailableTeams(selectedPlayer).map((team) => (
@@ -1048,36 +1052,23 @@ function App() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label>Second Team Pick</Label>
-                        <Select value={redemptionPicks.team2} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, team2: value }))}>
+                        <Label>Second Underdog Team</Label>
+                        <Select value={redemptionPicks.underdogTeam2} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam2: value }))}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Choose second team" />
+                            <SelectValue placeholder="Choose second underdog team" />
                           </SelectTrigger>
                           <SelectContent>
-                            {getAvailableTeams(selectedPlayer).filter(team => team !== redemptionPicks.team1).map((team) => (
+                            {underdogTeams.filter(team => team !== redemptionPicks.underdogTeam1).map((team) => (
                               <SelectItem key={team} value={team}>{team}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Underdog Team Pick</Label>
-                        <Select value={redemptionPicks.underdogTeam} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam: value }))}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose underdog team" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {underdogTeams.filter(team => team !== redemptionPicks.team1 && team !== redemptionPicks.team2).map((team) => (
-                              <SelectItem key={team} value={team}>{team}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
 
                       <Button 
                         onClick={makeRedemptionPicks} 
-                        disabled={loading || !redemptionPicks.team1 || !redemptionPicks.team2 || !redemptionPicks.underdogTeam || gameSettings?.picks_locked}
+                        disabled={loading || !redemptionPicks.underdogTeam1 || !redemptionPicks.underdogTeam2 || gameSettings?.picks_locked}
                         className="w-full"
                       >
                         {loading ? 'Submitting...' : 'Submit Redemption Picks'}
