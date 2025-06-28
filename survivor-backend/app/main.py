@@ -387,7 +387,7 @@ async def buyback(player_id: str, request: BuybackRequest, user: User = Depends(
     if player.eliminated_week is None or request.week != player.eliminated_week + 1:
         raise HTTPException(status_code=400, detail="Can only buyback the week after elimination")
     
-    cost = game_settings.buyback_multiplier * request.week
+    cost = 35.0  # Fixed $35 contribution
     
     player.status = PlayerStatus.ACTIVE
     player.buybacks += 1
@@ -405,7 +405,7 @@ async def undo_contribution(player_id: str, request: BuybackRequest, user: User 
     if player.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not your player")
     
-    cost = game_settings.buyback_multiplier * request.week
+    cost = 35.0  # Fixed $35 contribution
     
     player.financial_contribution += cost
     players_db[player_id] = player

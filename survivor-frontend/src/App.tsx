@@ -1127,30 +1127,10 @@ function App() {
                         </div>
                         {getStatusBadge(entry.status)}
                       </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right text-sm">
-                          <div>Weeks: {entry.weeks_survived}</div>
-                          <div className="text-gray-600">
-                            R: {entry.redemption_visits} | B: {entry.buybacks}
-                          </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleBuyback(entry.player_id)}
-                            disabled={loading}
-                          >
-                            Buyback
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleUndo(entry.player_id)}
-                            disabled={loading}
-                          >
-                            Undo
-                          </Button>
+                      <div className="text-right text-sm">
+                        <div>Weeks: {entry.weeks_survived}</div>
+                        <div className="text-gray-600">
+                          R: {entry.redemption_visits} | B: {entry.buybacks}
                         </div>
                       </div>
                     </div>
@@ -1186,22 +1166,42 @@ function App() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {leaderboard
-                      .filter(entry => (entry.financial_contribution || 0) > 0)
+                    {leaderboard.length > 0 ? leaderboard
                       .sort((a, b) => (b.financial_contribution || 0) - (a.financial_contribution || 0))
                       .map((entry) => (
                         <div key={entry.player_id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                          <div>
+                          <div className="flex-1">
                             <span className="font-medium">{entry.entry_name}</span>
                             <div className="text-sm text-gray-600">@{entry.username}</div>
                           </div>
-                          <span className="text-lg font-semibold text-gray-800">${(entry.financial_contribution || 0).toFixed(2)}</span>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-lg font-semibold text-gray-800 min-w-[80px] text-right">
+                              ${(entry.financial_contribution || 0).toFixed(2)}
+                            </span>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleBuyback(entry.player_id)}
+                                disabled={loading}
+                              >
+                                Buyback
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleUndo(entry.player_id)}
+                                disabled={loading}
+                              >
+                                Undo
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                      ))}
-                    {leaderboard.every(entry => (entry.financial_contribution || 0) === 0) && (
+                      )) : (
                       <div className="text-center py-8">
-                        <div className="text-gray-500 text-lg">No contributions yet</div>
-                        <div className="text-sm text-gray-400 mt-2">Use Buyback or Undo buttons in the Leaderboard to add contributions</div>
+                        <div className="text-gray-500 text-lg">No players yet</div>
+                        <div className="text-sm text-gray-400 mt-2">Players will appear here once they join the league</div>
                       </div>
                     )}
                   </div>
