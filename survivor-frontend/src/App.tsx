@@ -11,12 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://app-xieyxwel.fly.dev'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 interface User {
   id: string
   username: string
+  email: string
   role: 'admin' | 'player'
+  profile_picture_url?: string
 }
 
 interface Player {
@@ -106,6 +108,10 @@ function App() {
   const [newTeamName, setNewTeamName] = useState('')
   const [gameSettingsForm, setGameSettingsForm] = useState({ entry_fee: 35, buyback_multiplier: 3 })
   const [selectedPlayer, setSelectedPlayer] = useState('')
+  const [profileForm, setProfileForm] = useState({ username: '', email: '' })
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null)
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null)
   const [gameResults, setGameResults] = useState<GameResult[]>([])
   const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | 'bye' | null>>({})
   const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
@@ -143,6 +149,12 @@ function App() {
       })
     }
   }, [user, teams, gameSettings])
+
+  useEffect(() => {
+    if (user) {
+      setProfileForm({ username: user.username, email: user.email })
+    }
+  }, [user])
 
   useEffect(() => {
     if (selectedPlayer) {
@@ -778,6 +790,120 @@ function App() {
     setEditableTeams(editableTeams.filter(team => team !== teamToRemove))
   }
 
+  const updateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profileForm.username.trim() && !profileForm.email.trim()) {
+      setError('Please provide at least one field to update')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const updateData: any = {}
+      if (profileForm.username.trim()) updateData.username = profileForm.username.trim()
+      if (profileForm.email.trim()) updateData.email = profileForm.email.trim()
+
+      const response = await apiCall('/me', {
+        method: 'PUT',
+        body: JSON.stringify(updateData)
+      })
+      setUser(response.user)
+      setSuccess('Profile updated successfully!')
+      setProfileForm({ username: response.user.username, email: response.user.email })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Profile update failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updatePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setError('Please fill in all password fields')
+      return
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setError('New passwords do not match')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      await apiCall('/me/password', {
+        method: 'PUT',
+        body: JSON.stringify({
+          current_password: passwordForm.currentPassword,
+          new_password: passwordForm.newPassword
+        })
+      })
+      setSuccess('Password updated successfully!')
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Password update failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setProfilePhotoFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setProfilePhotoPreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const updateProfilePhoto = async () => {
+    if (!profilePhotoFile) {
+      setError('Please select a photo to upload')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const formData = new FormData()
+      formData.append('profile_picture', profilePhotoFile)
+
+      const response = await fetch(`${API_URL}/me/profile-picture`, {
+        method: 'PUT',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Photo upload failed')
+      }
+
+      const data = await response.json()
+      setUser({ ...user!, profile_picture_url: data.profile_picture_url })
+      setSuccess('Profile photo updated successfully!')
+      setProfilePhotoFile(null)
+      setProfilePhotoPreview(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Photo upload failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (initializing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -948,9 +1074,9 @@ function App() {
                     />
                     {profilePicturePreview && (
                       <div className="mt-2">
-                        <img 
-                          src={profilePicturePreview} 
-                          alt="Profile preview" 
+                        <img
+                          src={profilePicturePreview}
+                          alt="Profile preview"
                           className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
                         />
                       </div>
@@ -1006,8 +1132,9 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="picks">Make Picks</TabsTrigger>
             <TabsTrigger value="leaderboard">Sexy Sexy Visual Tracker</TabsTrigger>
             <TabsTrigger value="everyone-picks">Everyone's Picks</TabsTrigger>
@@ -1101,6 +1228,165 @@ function App() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="profile" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Update Profile</CardTitle>
+                  <CardDescription>Change your username and email address</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={updateProfile} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-username">Username</Label>
+                      <Input
+                        id="profile-username"
+                        type="text"
+                        value={profileForm.username}
+                        onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                        placeholder="Enter new username"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-email">Email</Label>
+                      <Input
+                        id="profile-email"
+                        type="email"
+                        value={profileForm.email}
+                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                        placeholder="Enter new email"
+                      />
+                    </div>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? 'Updating...' : 'Update Profile'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Change Password</CardTitle>
+                  <CardDescription>Update your account password</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={updatePassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="current-password">Current Password</Label>
+                      <Input
+                        id="current-password"
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="new-password">New Password</Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm-password">Confirm New Password</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? 'Updating...' : 'Update Password'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Profile Picture</CardTitle>
+                <CardDescription>Update your profile photo</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-6">
+                    <div className="flex-shrink-0">
+                      <Avatar className="h-20 w-20">
+                        <AvatarImage 
+                          src={user?.profile_picture_url ? `${API_URL}${user.profile_picture_url}` : undefined} 
+                          alt={user?.username} 
+                        />
+                        <AvatarFallback className="text-lg">
+                          {user?.username?.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div className="flex-1">
+                      <div className="space-y-2">
+                        <Label htmlFor="profile-photo">Choose new photo</Label>
+                        <Input
+                          id="profile-photo"
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp"
+                          onChange={handleProfilePhotoChange}
+                          className="cursor-pointer"
+                        />
+                        <p className="text-sm text-gray-500">
+                          Supported formats: JPEG, PNG, GIF, WebP (max 5MB)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {profilePhotoPreview && (
+                    <div className="space-y-2">
+                      <Label>Preview</Label>
+                      <div className="flex items-center space-x-4">
+                        <Avatar className="h-16 w-16">
+                          <AvatarImage src={profilePhotoPreview} alt="Preview" />
+                        </Avatar>
+                        <div className="flex space-x-2">
+                          <Button onClick={updateProfilePhoto} disabled={loading}>
+                            {loading ? 'Uploading...' : 'Upload Photo'}
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            onClick={() => {
+                              setProfilePhotoFile(null)
+                              setProfilePhotoPreview(null)
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {error && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {success && (
+              <Alert className="border-green-200 bg-green-50">
+                <AlertDescription className="text-green-800">{success}</AlertDescription>
+              </Alert>
+            )}
           </TabsContent>
 
           <TabsContent value="picks" className="space-y-6">

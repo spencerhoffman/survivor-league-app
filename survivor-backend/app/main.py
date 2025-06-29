@@ -126,6 +126,14 @@ class UpdateUserRoleRequest(BaseModel):
 class UpdateTeamsRequest(BaseModel):
     teams: List[str]
 
+class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+
+class UpdatePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -268,6 +276,36 @@ async def create_player(request: CreatePlayerRequest, user: User = Depends(get_c
 @app.get("/me")
 async def get_current_user_profile(user: User = Depends(get_current_user)):
     return user
+
+@app.put("/me")
+async def update_profile(request: UpdateProfileRequest, user: User = Depends(get_current_user)):
+    if request.username is not None:
+        for existing_user in users_db.values():
+            if existing_user.username == request.username and existing_user.id != user.id:
+                raise HTTPException(status_code=400, detail="Username already exists")
+        user.username = request.username
+    
+    if request.email is not None:
+        user.email = request.email
+    
+    users_db[user.id] = user
+    return {"message": "Profile updated successfully", "user": {"id": user.id, "username": user.username, "email": user.email, "role": user.role}}
+
+@app.put("/me/password")
+async def update_password(request: UpdatePasswordRequest, user: User = Depends(get_current_user)):
+    if not verify_password(request.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    user.password_hash = hash_password(request.new_password)
+    users_db[user.id] = user
+    return {"message": "Password updated successfully"}
+
+@app.put("/me/profile-picture")
+async def update_profile_picture(profile_picture: UploadFile = File(...), user: User = Depends(get_current_user)):
+    profile_picture_url = save_profile_picture(profile_picture, user.id)
+    user.profile_picture_url = profile_picture_url
+    users_db[user.id] = user
+    return {"message": "Profile picture updated successfully", "profile_picture_url": profile_picture_url}
 
 @app.get("/players/me")
 async def get_my_players(user: User = Depends(get_current_user)):
