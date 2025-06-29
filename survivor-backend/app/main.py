@@ -100,8 +100,8 @@ class MakePickRequest(BaseModel):
     is_underdog: bool = False
 
 class RedemptionPickRequest(BaseModel):
-    underdog_team1: str
-    underdog_team2: str
+    teams: List[str]
+    week: int
 
 class BuybackRequest(BaseModel):
     week: int
@@ -235,7 +235,7 @@ async def register(
     users_db[user_id] = user
     
     token = create_token(user_id)
-    return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role, "profile_picture_url": user.profile_picture_url}}
+    return {"token": token, "user": {"id": user.id, "username": user.username, "email": user.email, "role": user.role, "profile_picture_url": user.profile_picture_url}}
 
 @app.post("/auth/login")
 async def login(request: LoginRequest):
@@ -268,14 +268,16 @@ async def create_player(request: CreatePlayerRequest, user: User = Depends(get_c
     player = Player(
         id=player_id,
         user_id=user.id,
-        entry_name=request.entry_name
+        entry_name=request.entry_name,
+        entry_fee_paid=True,
+        financial_contribution=float(game_settings.entry_fee)
     )
     players_db[player_id] = player
     return player
 
 @app.get("/me")
 async def get_current_user_profile(user: User = Depends(get_current_user)):
-    return user
+    return {"id": user.id, "username": user.username, "email": user.email, "role": user.role, "profile_picture_url": user.profile_picture_url, "created_at": user.created_at}
 
 @app.put("/me")
 async def update_profile(request: UpdateProfileRequest, user: User = Depends(get_current_user)):
@@ -365,7 +367,10 @@ async def make_redemption_picks(player_id: str, request: RedemptionPickRequest, 
     if game_settings.picks_locked:
         raise HTTPException(status_code=400, detail="Picks are locked for this week")
     
-    teams = [request.underdog_team1, request.underdog_team2]
+    teams = request.teams
+    if len(teams) != 2:
+        raise HTTPException(status_code=400, detail="Must pick exactly 2 teams for redemption")
+    
     for team in teams:
         if team not in NFL_TEAMS:
             raise HTTPException(status_code=400, detail=f"Invalid team: {team}")
@@ -375,12 +380,12 @@ async def make_redemption_picks(player_id: str, request: RedemptionPickRequest, 
         if team in used_teams or team in player.eliminated_teams:
             raise HTTPException(status_code=400, detail=f"Team already used or eliminated: {team}")
     
-    underdog_teams = [ut.team for ut in underdog_teams_db if ut.week == game_settings.current_week]
+    underdog_teams = [ut.team for ut in underdog_teams_db if ut.week == request.week]
     for team in teams:
         if team not in underdog_teams:
             raise HTTPException(status_code=400, detail=f"Invalid underdog team: {team}")
     
-    if request.underdog_team1 == request.underdog_team2:
+    if teams[0] == teams[1]:
         raise HTTPException(status_code=400, detail="Must pick two different underdog teams")
     
     picks = []
@@ -389,7 +394,7 @@ async def make_redemption_picks(player_id: str, request: RedemptionPickRequest, 
         pick = WeeklyPick(
             id=pick_id,
             player_id=player_id,
-            week=game_settings.current_week,
+            week=request.week,
             team=team,
             is_redemption=True,
             is_underdog=True,  # All redemption picks are underdog picks
@@ -467,11 +472,11 @@ async def buyback(player_id: str, request: BuybackRequest, user: User = Depends(
     if player.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not your player")
     
-    if player.status != PlayerStatus.ELIMINATED:
-        raise HTTPException(status_code=400, detail="Player not eliminated")
+    if player.status not in [PlayerStatus.ELIMINATED, PlayerStatus.REDEMPTION]:
+        raise HTTPException(status_code=400, detail="Player must be eliminated or in redemption to buyback")
     
-    if player.eliminated_week is None or request.week != player.eliminated_week + 1:
-        raise HTTPException(status_code=400, detail="Can only buyback the week after elimination")
+    if player.eliminated_week is None or request.week <= player.eliminated_week:
+        raise HTTPException(status_code=400, detail="Can only buyback in weeks after elimination")
     
     cost = request.week * game_settings.buyback_multiplier  # Dynamic cost based on week
     
@@ -499,13 +504,20 @@ async def undo_contribution(player_id: str, request: BuybackRequest, user: User 
     return {"message": f"Undo contribution successful for week {request.week}", "cost": cost}
 
 @app.post("/admin/underdog-teams")
-async def add_underdog_team(team: str, week: int, admin: User = Depends(require_admin)):
-    if team not in NFL_TEAMS:
-        raise HTTPException(status_code=400, detail="Invalid team")
+async def add_underdog_team(request: dict, admin: User = Depends(require_admin)):
+    teams = request.get("teams", [])
+    week = request.get("week", game_settings.current_week)
     
-    underdog_team = UnderdogTeam(team=team, week=week)
-    underdog_teams_db.append(underdog_team)
-    return underdog_team
+    added_teams = []
+    for team in teams:
+        if team not in NFL_TEAMS:
+            raise HTTPException(status_code=400, detail=f"Invalid team: {team}")
+        
+        underdog_team = UnderdogTeam(team=team, week=week)
+        underdog_teams_db.append(underdog_team)
+        added_teams.append(underdog_team)
+    
+    return {"teams": [t.team for t in added_teams], "week": week}
 
 @app.get("/admin/underdog-teams/{week}")
 async def get_underdog_teams(week: int):
@@ -714,7 +726,10 @@ async def process_week_results(admin: User = Depends(require_admin)):
                 if team_won:
                     correct_picks += 1
             
-            if correct_picks == 0:
+            if correct_picks == len(redemption_picks) and len(redemption_picks) == 2:
+                player.status = PlayerStatus.ACTIVE
+                players_db[player_id] = player
+            else:
                 player.status = PlayerStatus.ELIMINATED
                 player.eliminated_week = current_week
                 players_db[player_id] = player
@@ -724,9 +739,6 @@ async def process_week_results(admin: User = Depends(require_admin)):
                     "picked_team": "redemption picks",
                     "new_status": player.status
                 })
-            else:
-                player.status = PlayerStatus.ACTIVE
-                players_db[player_id] = player
         
         processed_players.add(player_id)
     
