@@ -98,6 +98,10 @@ function App() {
   const [showResetPassword, setShowResetPassword] = useState(false)
   const [newPlayerName, setNewPlayerName] = useState('')
   const [selectedTeam, setSelectedTeam] = useState('')
+  const [allUsers, setAllUsers] = useState<any[]>([])
+  const [editableTeams, setEditableTeams] = useState<string[]>([])
+  const [newTeamName, setNewTeamName] = useState('')
+  const [gameSettingsForm, setGameSettingsForm] = useState({ entry_fee: 35, buyback_multiplier: 3 })
   const [selectedPlayer, setSelectedPlayer] = useState('')
   const [gameResults, setGameResults] = useState<GameResult[]>([])
   const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | 'bye' | null>>({})
@@ -125,6 +129,17 @@ function App() {
       fetchGameResults()
     }
   }, [user, gameSettings?.current_week])
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchAllUsers()
+      setEditableTeams([...teams])
+      setGameSettingsForm({
+        entry_fee: gameSettings?.entry_fee || 35,
+        buyback_multiplier: gameSettings?.buyback_multiplier || 3
+      })
+    }
+  }, [user, teams, gameSettings])
 
   useEffect(() => {
     if (selectedPlayer) {
@@ -678,6 +693,65 @@ function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchAllUsers = async () => {
+    try {
+      const users = await apiCall('/admin/users')
+      setAllUsers(users)
+    } catch (err) {
+      setError('Failed to fetch users')
+    }
+  }
+
+  const updateUserRole = async (userId: string, role: string) => {
+    try {
+      await apiCall('/admin/users/role', {
+        method: 'PUT',
+        body: JSON.stringify({ user_id: userId, role })
+      })
+      setSuccess('User role updated successfully')
+      fetchAllUsers()
+    } catch (err) {
+      setError('Failed to update user role')
+    }
+  }
+
+  const updateGameSettings = async () => {
+    try {
+      await apiCall('/admin/settings', {
+        method: 'PUT',
+        body: JSON.stringify(gameSettingsForm)
+      })
+      setSuccess('Game settings updated successfully')
+      fetchGameSettings()
+    } catch (err) {
+      setError('Failed to update game settings')
+    }
+  }
+
+  const updateTeams = async () => {
+    try {
+      await apiCall('/admin/teams', {
+        method: 'PUT',
+        body: JSON.stringify({ teams: editableTeams })
+      })
+      setSuccess('Teams updated successfully')
+      fetchTeams()
+    } catch (err) {
+      setError('Failed to update teams')
+    }
+  }
+
+  const addNewTeam = () => {
+    if (newTeamName.trim() && !editableTeams.includes(newTeamName.trim())) {
+      setEditableTeams([...editableTeams, newTeamName.trim()])
+      setNewTeamName('')
+    }
+  }
+
+  const removeTeam = (teamToRemove: string) => {
+    setEditableTeams(editableTeams.filter(team => team !== teamToRemove))
   }
 
   if (initializing) {
@@ -1303,6 +1377,119 @@ function App() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
+                    {/* Game Settings */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Game Settings</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="entry_fee">Entry Fee ($)</Label>
+                          <Input
+                            id="entry_fee"
+                            type="number"
+                            value={gameSettingsForm.entry_fee}
+                            onChange={(e) => setGameSettingsForm(prev => ({ ...prev, entry_fee: parseInt(e.target.value) || 0 }))}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="buyback_multiplier">Buyback Multiplier</Label>
+                          <Input
+                            id="buyback_multiplier"
+                            type="number"
+                            value={gameSettingsForm.buyback_multiplier}
+                            onChange={(e) => setGameSettingsForm(prev => ({ ...prev, buyback_multiplier: parseInt(e.target.value) || 0 }))}
+                          />
+                        </div>
+                      </div>
+                      <Button onClick={updateGameSettings} disabled={loading}>
+                        Update Game Settings
+                      </Button>
+                    </div>
+
+                    {/* User Role Management */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">User Management</h3>
+                      <div className="border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Username</TableHead>
+                              <TableHead>Email</TableHead>
+                              <TableHead>Current Role</TableHead>
+                              <TableHead>Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {allUsers.map((user) => (
+                              <TableRow key={user.id}>
+                                <TableCell className="font-medium">{user.username}</TableCell>
+                                <TableCell>{user.email}</TableCell>
+                                <TableCell>
+                                  <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                                    {user.role}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex space-x-2">
+                                    {user.role === 'player' && (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => updateUserRole(user.id, 'admin')}
+                                        disabled={loading}
+                                      >
+                                        Make Admin
+                                      </Button>
+                                    )}
+                                    {user.role === 'admin' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => updateUserRole(user.id, 'player')}
+                                        disabled={loading}
+                                      >
+                                        Remove Admin
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+
+                    {/* Team Management */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Team Management</h3>
+                      <div className="space-y-2">
+                        <div className="flex space-x-2">
+                          <Input
+                            placeholder="Add new team (e.g., LAR)"
+                            value={newTeamName}
+                            onChange={(e) => setNewTeamName(e.target.value)}
+                          />
+                          <Button onClick={addNewTeam} disabled={loading}>
+                            Add Team
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto border rounded p-2">
+                          {editableTeams.map((team) => (
+                            <div key={team} className="flex items-center space-x-1 bg-gray-100 rounded px-2 py-1">
+                              <span className="text-sm">{team}</span>
+                              <button
+                                onClick={() => removeTeam(team)}
+                                className="text-red-500 hover:text-red-700 text-xs"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <Button onClick={updateTeams} disabled={loading}>
+                          Save Team Changes
+                        </Button>
+                      </div>
+                    </div>
 
                     {/* Game Results */}
                     <div className="space-y-4">

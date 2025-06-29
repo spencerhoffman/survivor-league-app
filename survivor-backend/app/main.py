@@ -111,6 +111,17 @@ class ResetPasswordRequest(BaseModel):
     email: str
     new_password: str
 
+class UpdateGameSettingsRequest(BaseModel):
+    entry_fee: Optional[int] = None
+    buyback_multiplier: Optional[int] = None
+
+class UpdateUserRoleRequest(BaseModel):
+    user_id: str
+    role: UserRole
+
+class UpdateTeamsRequest(BaseModel):
+    teams: List[str]
+
 users_db: Dict[str, User] = {}
 players_db: Dict[str, Player] = {}
 picks_db: List[WeeklyPick] = []
@@ -128,8 +139,8 @@ NFL_TEAMS = [
 admin_id = str(uuid.uuid4())
 admin_user = User(
     id=admin_id,
-    username="admin",
-    email="admin@example.com",
+    username="Spence",
+    email="spencerhhoffman@gmail.com",
     password_hash=hashlib.sha256(os.getenv("ADMIN_PASSWORD", "admin123").encode()).hexdigest(),
     role=UserRole.ADMIN,
     created_at=datetime.now()
@@ -461,6 +472,43 @@ async def unlock_picks(admin: User = Depends(require_admin)):
 @app.get("/admin/settings")
 async def get_settings():
     return game_settings
+
+@app.put("/admin/settings")
+async def update_game_settings(request: UpdateGameSettingsRequest, admin: User = Depends(require_admin)):
+    if request.entry_fee is not None:
+        game_settings.entry_fee = request.entry_fee
+    if request.buyback_multiplier is not None:
+        game_settings.buyback_multiplier = request.buyback_multiplier
+    return game_settings
+
+@app.get("/admin/users")
+async def get_all_users(admin: User = Depends(require_admin)):
+    return [{"id": user.id, "username": user.username, "email": user.email, "role": user.role} 
+            for user in users_db.values()]
+
+@app.put("/admin/users/role")
+async def update_user_role(request: UpdateUserRoleRequest, admin: User = Depends(require_admin)):
+    if request.user_id not in users_db:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user = users_db[request.user_id]
+    user.role = request.role
+    users_db[request.user_id] = user
+    
+    return {"message": f"User {user.username} role updated to {request.role}"}
+
+@app.put("/admin/teams")
+async def update_teams(request: UpdateTeamsRequest, admin: User = Depends(require_admin)):
+    global NFL_TEAMS
+    if len(request.teams) == 0:
+        raise HTTPException(status_code=400, detail="Teams list cannot be empty")
+    
+    NFL_TEAMS = request.teams
+    return {"message": f"Teams updated successfully", "teams": NFL_TEAMS}
+
+@app.get("/admin/teams")
+async def get_teams_admin(admin: User = Depends(require_admin)):
+    return {"teams": NFL_TEAMS}
 
 @app.get("/leaderboard")
 async def get_leaderboard():
