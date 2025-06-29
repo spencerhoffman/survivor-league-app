@@ -1269,7 +1269,7 @@ function App() {
 
           <TabsContent value="leaderboard" className="space-y-6">
             <Card>
-wha              <CardHeader>
+              <CardHeader>
                 <CardTitle>Sexy Sexy Visual Tracker</CardTitle>
                 <CardDescription>Current standings and elimination status</CardDescription>
               </CardHeader>
