@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from datetime import datetime, date
@@ -9,6 +10,8 @@ import uuid
 import jwt
 import hashlib
 import os
+import shutil
+from pathlib import Path
 
 app = FastAPI(title="Survivor League API")
 
@@ -40,6 +43,7 @@ class User(BaseModel):
     password_hash: str
     role: UserRole = UserRole.PLAYER
     created_at: datetime
+    profile_picture_url: Optional[str] = None
 
 class Player(BaseModel):
     id: str
@@ -122,6 +126,10 @@ class UpdateUserRoleRequest(BaseModel):
 class UpdateTeamsRequest(BaseModel):
     teams: List[str]
 
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+MAX_FILE_SIZE = 5 * 1024 * 1024
 users_db: Dict[str, User] = {}
 players_db: Dict[str, Player] = {}
 picks_db: List[WeeklyPick] = []
@@ -135,6 +143,22 @@ NFL_TEAMS = [
     "MIN", "NE", "NO", "NYG", "NYJ", "PHI", "PIT", "SF", "SEA", "TB",
     "TEN", "WSH"
 ]
+
+def validate_image_file(file: UploadFile) -> None:
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.")
+
+def save_profile_picture(file: UploadFile, user_id: str) -> str:
+    validate_image_file(file)
+    
+    file_extension = file.filename.split('.')[-1] if file.filename else 'jpg'
+    filename = f"{user_id}_profile.{file_extension}"
+    file_path = UPLOAD_DIR / filename
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return f"/uploads/{filename}"
 
 admin_id = str(uuid.uuid4())
 admin_user = User(
@@ -178,23 +202,32 @@ async def healthz():
     return {"status": "ok"}
 
 @app.post("/auth/register")
-async def register(request: RegisterRequest):
+async def register(
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    profile_picture: UploadFile = File(...)
+):
     for user in users_db.values():
-        if user.username == request.username:
+        if user.username == username:
             raise HTTPException(status_code=400, detail="Username already exists")
     
     user_id = str(uuid.uuid4())
+    
+    profile_picture_url = save_profile_picture(profile_picture, user_id)
+    
     user = User(
         id=user_id,
-        username=request.username,
-        email=request.email,
-        password_hash=hash_password(request.password),
-        created_at=datetime.now()
+        username=username,
+        email=email,
+        password_hash=hash_password(password),
+        created_at=datetime.now(),
+        profile_picture_url=profile_picture_url
     )
     users_db[user_id] = user
     
     token = create_token(user_id)
-    return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role}}
+    return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role, "profile_picture_url": user.profile_picture_url}}
 
 @app.post("/auth/login")
 async def login(request: LoginRequest):
@@ -719,6 +752,13 @@ async def reset_league(admin: User = Depends(require_admin)):
             "picks_locked": game_settings.picks_locked
         }
     }
+
+@app.get("/uploads/{filename}")
+async def get_uploaded_file(filename: str):
+    file_path = UPLOAD_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
 
 @app.get("/teams")
 async def get_teams():
