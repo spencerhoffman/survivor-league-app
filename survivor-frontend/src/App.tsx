@@ -15,6 +15,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://app-xieyxwel.fly.dev'
 interface User {
   id: string
   username: string
+  email: string
   role: 'admin' | 'player'
 }
 
@@ -103,6 +104,8 @@ function App() {
   const [newTeamName, setNewTeamName] = useState('')
   const [gameSettingsForm, setGameSettingsForm] = useState({ entry_fee: 35, buyback_multiplier: 3 })
   const [selectedPlayer, setSelectedPlayer] = useState('')
+  const [profileForm, setProfileForm] = useState({ username: '', email: '' })
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [gameResults, setGameResults] = useState<GameResult[]>([])
   const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | 'bye' | null>>({})
   const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
@@ -140,6 +143,12 @@ function App() {
       })
     }
   }, [user, teams, gameSettings])
+
+  useEffect(() => {
+    if (user) {
+      setProfileForm({ username: user.username, email: user.email })
+    }
+  }, [user])
 
   useEffect(() => {
     if (selectedPlayer) {
@@ -404,7 +413,7 @@ function App() {
 
   const recordTableGameResults = async () => {
     const teamsWithOutcomes = Object.entries(teamResults).filter(([_, outcome]) => outcome !== null)
-    
+
     if (teamsWithOutcomes.length === 0) {
       setError('Please select an outcome for at least one team')
       return
@@ -470,7 +479,7 @@ function App() {
         method: 'POST'
       })
       setSuccess('League reset successfully! All data has been cleared.')
-      
+
       setMyPlayers([])
       setLeaderboard([])
       setEveryonesPicks([])
@@ -479,7 +488,7 @@ function App() {
       setTeamResults({})
       setCurrentPicks([])
       setSelectedPlayer('')
-      
+
       fetchGameSettings()
       fetchLeaderboard()
       fetchEveryonesPicks()
@@ -500,16 +509,16 @@ function App() {
       const processResult = await apiCall('/admin/process-week-results', {
         method: 'POST'
       })
-      
+
       await apiCall('/admin/lock-picks', {
         method: 'POST'
       })
       await apiCall('/admin/advance-week', {
         method: 'POST'
       })
-      
+
       setSuccess(`Week processed successfully! ${processResult.total_eliminated} players eliminated. Picks locked and advanced to next week.`)
-      
+
       await fetchGameSettings()
       await fetchLeaderboard()
       await fetchEveryonesPicks()
@@ -532,7 +541,7 @@ function App() {
       await apiCall('/admin/unlock-picks', {
         method: 'POST'
       })
-      
+
       const currentWeek = gameSettings?.current_week || 1
       if (currentWeek > 1) {
         const newWeek = currentWeek - 1
@@ -540,7 +549,7 @@ function App() {
       } else {
         setSuccess('Picks unlocked. Already at week 1, cannot go to previous week.')
       }
-      
+
       await fetchGameSettings()
       await fetchLeaderboard()
       await fetchEveryonesPicks()
@@ -595,7 +604,7 @@ function App() {
       setCurrentPicks([])
       return
     }
-    
+
     try {
       const picks = await apiCall(`/players/${playerId}/picks/current-week`)
       setCurrentPicks(picks)
@@ -655,7 +664,7 @@ function App() {
 
   const handleBuyback = async (playerId: string) => {
     if (!gameSettings) return
-    
+
     try {
       setLoading(true)
       setError('')
@@ -676,7 +685,7 @@ function App() {
 
   const handleUndo = async (playerId: string) => {
     if (!gameSettings) return
-    
+
     try {
       setLoading(true)
       setError('')
@@ -754,6 +763,69 @@ function App() {
     setEditableTeams(editableTeams.filter(team => team !== teamToRemove))
   }
 
+  const updateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profileForm.username.trim() && !profileForm.email.trim()) {
+      setError('Please provide at least one field to update')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const updateData: any = {}
+      if (profileForm.username.trim()) updateData.username = profileForm.username.trim()
+      if (profileForm.email.trim()) updateData.email = profileForm.email.trim()
+
+      const response = await apiCall('/me', {
+        method: 'PUT',
+        body: JSON.stringify(updateData)
+      })
+      setUser(response.user)
+      setSuccess('Profile updated successfully!')
+      setProfileForm({ username: response.user.username, email: response.user.email })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Profile update failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updatePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setError('Please fill in all password fields')
+      return
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setError('New passwords do not match')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      await apiCall('/me/password', {
+        method: 'PUT',
+        body: JSON.stringify({
+          current_password: passwordForm.currentPassword,
+          new_password: passwordForm.newPassword
+        })
+      })
+      setSuccess('Password updated successfully!')
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Password update failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (initializing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -808,8 +880,8 @@ function App() {
                       </Button>
                     </form>
                     <div className="text-center">
-                      <Button 
-                        variant="link" 
+                      <Button
+                        variant="link"
                         onClick={() => setShowResetPassword(true)}
                         className="text-sm text-blue-600 hover:text-blue-800"
                       >
@@ -859,8 +931,8 @@ function App() {
                       </Button>
                     </form>
                     <div className="text-center">
-                      <Button 
-                        variant="link" 
+                      <Button
+                        variant="link"
                         onClick={() => setShowResetPassword(false)}
                         className="text-sm text-gray-600 hover:text-gray-800"
                       >
@@ -953,8 +1025,9 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="picks">Make Picks</TabsTrigger>
             <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
             <TabsTrigger value="everyone-picks">Everyone's Picks</TabsTrigger>
@@ -1050,13 +1123,108 @@ function App() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="profile" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Update Profile</CardTitle>
+                  <CardDescription>Change your username and email address</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={updateProfile} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-username">Username</Label>
+                      <Input
+                        id="profile-username"
+                        type="text"
+                        value={profileForm.username}
+                        onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                        placeholder="Enter new username"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-email">Email</Label>
+                      <Input
+                        id="profile-email"
+                        type="email"
+                        value={profileForm.email}
+                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                        placeholder="Enter new email"
+                      />
+                    </div>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? 'Updating...' : 'Update Profile'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Change Password</CardTitle>
+                  <CardDescription>Update your account password</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={updatePassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="current-password">Current Password</Label>
+                      <Input
+                        id="current-password"
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="new-password">New Password</Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm-password">Confirm New Password</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? 'Updating...' : 'Update Password'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+
+            {error && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {success && (
+              <Alert className="border-green-200 bg-green-50">
+                <AlertDescription className="text-green-800">{success}</AlertDescription>
+              </Alert>
+            )}
+          </TabsContent>
+
           <TabsContent value="picks" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Make Your Pick - Week {gameSettings?.current_week}</CardTitle>
                 <CardDescription>
-                  {gameSettings?.picks_locked 
-                    ? 'Picks are currently locked' 
+                  {gameSettings?.picks_locked
+                    ? 'Picks are currently locked'
                     : 'Select a team you think will win this week'}
                 </CardDescription>
               </CardHeader>
@@ -1094,16 +1262,16 @@ function App() {
                                 <div className="flex space-x-2">
                                   {editingPick === pick.id ? (
                                     <div className="flex items-center space-x-2">
-                                      <Select 
-                                        value={pick.team} 
+                                      <Select
+                                        value={pick.team}
                                         onValueChange={(team) => updatePick(pick.id, team, pick.is_underdog)}
                                       >
                                         <SelectTrigger className="w-32">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          {teams.filter(team => 
-                                            team === pick.team || 
+                                          {teams.filter(team =>
+                                            team === pick.team ||
                                             !currentPicks.some(p => p.id !== pick.id && p.team === team)
                                           ).map((team) => (
                                             <SelectItem key={team} value={team}>{team}</SelectItem>
@@ -1144,7 +1312,7 @@ function App() {
                           <strong>Redemption Round:</strong> You must select 2 different underdog teams to continue.
                         </AlertDescription>
                       </Alert>
-                      
+
                       <div className="space-y-2">
                         <Label>First Underdog Team</Label>
                         <Select value={redemptionPicks.underdogTeam1} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam1: value }))}>
@@ -1174,8 +1342,8 @@ function App() {
                       </div>
 
 
-                      <Button 
-                        onClick={makeRedemptionPicks} 
+                      <Button
+                        onClick={makeRedemptionPicks}
                         disabled={loading || !redemptionPicks.underdogTeam1 || !redemptionPicks.underdogTeam2 || gameSettings?.picks_locked}
                         className="w-full"
                       >
@@ -1200,8 +1368,8 @@ function App() {
                         </Select>
                       </div>
 
-                      <Button 
-                        onClick={makePick} 
+                      <Button
+                        onClick={makePick}
                         disabled={loading || !selectedPlayer || !selectedTeam || gameSettings?.picks_locked}
                         className="w-full"
                       >
@@ -1569,15 +1737,15 @@ function App() {
                             </div>
                           </div>
                           <div className="flex space-x-4">
-                            <Button 
-                              onClick={lockPicksAndAdvanceWeek} 
+                            <Button
+                              onClick={lockPicksAndAdvanceWeek}
                               disabled={loading}
                               className="bg-green-600 hover:bg-green-700"
                             >
                               {loading ? 'Processing...' : 'Lock Picks and Advance Week'}
                             </Button>
-                            <Button 
-                              onClick={unlockPicksAndReturnToPreviousWeek} 
+                            <Button
+                              onClick={unlockPicksAndReturnToPreviousWeek}
                               disabled={loading || (gameSettings?.current_week || 1) <= 1}
                               variant="outline"
                               className="border-orange-300 text-orange-700 hover:bg-orange-50"
@@ -1624,7 +1792,7 @@ function App() {
                       <Button onClick={saveUnderdogTeams} disabled={loading}>
                         Save Underdog Teams
                       </Button>
-                      
+
                       {underdogTeams.length > 0 && (
                         <div className="space-y-2">
                           <Label>Current Underdog Teams (Week {gameSettings?.current_week})</Label>
@@ -1644,12 +1812,12 @@ function App() {
                         <div className="space-y-2">
                           <h4 className="font-medium text-red-800">Reset Entire League</h4>
                           <p className="text-sm text-red-700">
-                            This will permanently delete all players, picks, game results, underdog teams, and non-admin users. 
+                            This will permanently delete all players, picks, game results, underdog teams, and non-admin users.
                             The league will be reset to Week 1 with default settings.
                           </p>
-                          <Button 
-                            variant="destructive" 
-                            onClick={resetLeague} 
+                          <Button
+                            variant="destructive"
+                            onClick={resetLeague}
                             disabled={loading}
                             className="mt-2"
                           >
