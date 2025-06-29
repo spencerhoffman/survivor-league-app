@@ -93,8 +93,9 @@ function App() {
   const [initializing, setInitializing] = useState(true)
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
-  const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' })
+  const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '', profilePicture: null as File | null })
   const [resetPasswordForm, setResetPasswordForm] = useState({ username: '', email: '', newPassword: '' })
+  const [profilePicturePreview, setProfilePicturePreview] = useState<string | null>(null)
   const [showResetPassword, setShowResetPassword] = useState(false)
   const [newPlayerName, setNewPlayerName] = useState('')
   const [selectedTeam, setSelectedTeam] = useState('')
@@ -272,15 +273,36 @@ function App() {
     setLoading(true)
     setError('')
 
+    if (!registerForm.profilePicture) {
+      setError('Profile picture is required')
+      setLoading(false)
+      return
+    }
+
     try {
-      const response = await apiCall('/auth/register', {
+      const formData = new FormData()
+      formData.append('username', registerForm.username)
+      formData.append('email', registerForm.email)
+      formData.append('password', registerForm.password)
+      formData.append('profile_picture', registerForm.profilePicture)
+
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
-        body: JSON.stringify(registerForm),
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: formData
       })
 
-      setToken(response.token)
-      setUser(response.user)
-      localStorage.setItem('token', response.token)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Registration failed')
+      }
+
+      const data = await response.json()
+      setToken(data.token)
+      setUser(data.user)
+      localStorage.setItem('token', data.token)
       setSuccess('Registered successfully!')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
@@ -902,6 +924,35 @@ function App() {
                       onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
                       required
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="profile-picture">Profile Picture *</Label>
+                    <Input
+                      id="profile-picture"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null
+                        setRegisterForm({ ...registerForm, profilePicture: file })
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onload = (e) => setProfilePicturePreview(e.target?.result as string)
+                          reader.readAsDataURL(file)
+                        } else {
+                          setProfilePicturePreview(null)
+                        }
+                      }}
+                      required
+                    />
+                    {profilePicturePreview && (
+                      <div className="mt-2">
+                        <img 
+                          src={profilePicturePreview} 
+                          alt="Profile preview" 
+                          className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                        />
+                      </div>
+                    )}
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? 'Registering...' : 'Register'}
