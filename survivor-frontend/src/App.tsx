@@ -41,6 +41,7 @@ interface LeaderboardEntry {
   buybacks: number
   eliminated_week?: number
   financial_contribution: number
+  profile_picture_url?: string
 }
 
 interface PickEntry {
@@ -1316,6 +1317,12 @@ wha              <CardHeader>
                               <div className="w-32 flex-shrink-0 pr-4">
                                 <div className="flex items-center space-x-2">
                                   <Avatar className="h-8 w-8">
+                                    {entry.profile_picture_url && (
+                                      <AvatarImage 
+                                        src={`${API_URL}${entry.profile_picture_url}`} 
+                                        alt={entry.entry_name}
+                                      />
+                                    )}
                                     <AvatarFallback className="text-xs">
                                       {getPlayerInitials(entry)}
                                     </AvatarFallback>
@@ -1337,6 +1344,12 @@ wha              <CardHeader>
                                         status === 'eliminated' ? 'ring-2 ring-red-500' :
                                         status === 'redemption' ? 'ring-2 ring-yellow-500' : ''
                                       }`}>
+                                        {entry.profile_picture_url && (
+                                          <AvatarImage 
+                                            src={`${API_URL}${entry.profile_picture_url}`} 
+                                            alt={entry.entry_name}
+                                          />
+                                        )}
                                         <AvatarFallback className={`text-xs ${
                                           status === 'active' ? 'bg-green-100 text-green-800' :
                                           status === 'eliminated' ? 'bg-red-100 text-red-800' :
