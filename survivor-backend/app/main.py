@@ -300,6 +300,13 @@ async def update_password(request: UpdatePasswordRequest, user: User = Depends(g
     users_db[user.id] = user
     return {"message": "Password updated successfully"}
 
+@app.put("/me/profile-picture")
+async def update_profile_picture(profile_picture: UploadFile = File(...), user: User = Depends(get_current_user)):
+    profile_picture_url = save_profile_picture(profile_picture, user.id)
+    user.profile_picture_url = profile_picture_url
+    users_db[user.id] = user
+    return {"message": "Profile picture updated successfully", "profile_picture_url": profile_picture_url}
+
 @app.get("/players/me")
 async def get_my_players(user: User = Depends(get_current_user)):
     return [player for player in players_db.values() if player.user_id == user.id]

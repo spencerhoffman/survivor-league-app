@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://app-xieyxwel.fly.dev'
@@ -17,6 +18,7 @@ interface User {
   username: string
   email: string
   role: 'admin' | 'player'
+  profile_picture_url?: string
 }
 
 interface Player {
@@ -107,6 +109,8 @@ function App() {
   const [selectedPlayer, setSelectedPlayer] = useState('')
   const [profileForm, setProfileForm] = useState({ username: '', email: '' })
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null)
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null)
   const [gameResults, setGameResults] = useState<GameResult[]>([])
   const [teamResults, setTeamResults] = useState<Record<string, 'win' | 'loss' | 'bye' | null>>({})
   const [underdogTeamSelections, setUnderdogTeamSelections] = useState<Record<string, boolean>>({})
@@ -848,6 +852,57 @@ function App() {
     }
   }
 
+  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setProfilePhotoFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setProfilePhotoPreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const updateProfilePhoto = async () => {
+    if (!profilePhotoFile) {
+      setError('Please select a photo to upload')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const formData = new FormData()
+      formData.append('profile_picture', profilePhotoFile)
+
+      const response = await fetch(`${API_URL}/me/profile-picture`, {
+        method: 'PUT',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Photo upload failed')
+      }
+
+      const data = await response.json()
+      setUser({ ...user!, profile_picture_url: data.profile_picture_url })
+      setSuccess('Profile photo updated successfully!')
+      setProfilePhotoFile(null)
+      setProfilePhotoPreview(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Photo upload failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (initializing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -1018,9 +1073,9 @@ function App() {
                     />
                     {profilePicturePreview && (
                       <div className="mt-2">
-                        <img 
-                          src={profilePicturePreview} 
-                          alt="Profile preview" 
+                        <img
+                          src={profilePicturePreview}
+                          alt="Profile preview"
                           className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
                         />
                       </div>
@@ -1254,6 +1309,70 @@ function App() {
                 </CardContent>
               </Card>
             </div>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Profile Picture</CardTitle>
+                <CardDescription>Update your profile photo</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-6">
+                    <div className="flex-shrink-0">
+                      <Avatar className="h-20 w-20">
+                        <AvatarImage 
+                          src={user?.profile_picture_url ? `${API_URL}${user.profile_picture_url}` : undefined} 
+                          alt={user?.username} 
+                        />
+                        <AvatarFallback className="text-lg">
+                          {user?.username?.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div className="flex-1">
+                      <div className="space-y-2">
+                        <Label htmlFor="profile-photo">Choose new photo</Label>
+                        <Input
+                          id="profile-photo"
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp"
+                          onChange={handleProfilePhotoChange}
+                          className="cursor-pointer"
+                        />
+                        <p className="text-sm text-gray-500">
+                          Supported formats: JPEG, PNG, GIF, WebP (max 5MB)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {profilePhotoPreview && (
+                    <div className="space-y-2">
+                      <Label>Preview</Label>
+                      <div className="flex items-center space-x-4">
+                        <Avatar className="h-16 w-16">
+                          <AvatarImage src={profilePhotoPreview} alt="Preview" />
+                        </Avatar>
+                        <div className="flex space-x-2">
+                          <Button onClick={updateProfilePhoto} disabled={loading}>
+                            {loading ? 'Uploading...' : 'Upload Photo'}
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            onClick={() => {
+                              setProfilePhotoFile(null)
+                              setProfilePhotoPreview(null)
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
             {error && (
               <Alert className="border-red-200 bg-red-50">
