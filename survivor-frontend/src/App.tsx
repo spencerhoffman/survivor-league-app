@@ -42,6 +42,17 @@ interface LeaderboardEntry {
   financial_contribution: number
 }
 
+interface PickEntry {
+  pick_id: string
+  week: number
+  team: string
+  player_name: string
+  username: string
+  is_redemption: boolean
+  is_underdog: boolean
+  created_at: string
+}
+
 interface GameSettings {
   current_week: number
   entry_fee: number
@@ -72,6 +83,7 @@ function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'))
   const [myPlayers, setMyPlayers] = useState<Player[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [everyonesPicks, setEveryonesPicks] = useState<PickEntry[]>([])
   const [teams, setTeams] = useState<string[]>([])
   const [gameSettings, setGameSettings] = useState<GameSettings | null>(null)
   const [underdogTeams, setUnderdogTeams] = useState<string[]>([])
@@ -101,6 +113,7 @@ function App() {
       fetchTeams()
       fetchGameSettings()
       fetchLeaderboard()
+      fetchEveryonesPicks()
     } else {
       setInitializing(false)
     }
@@ -199,6 +212,15 @@ function App() {
     }
   }
 
+  const fetchEveryonesPicks = async () => {
+    try {
+      const picksData = await apiCall('/picks/locked')
+      setEveryonesPicks(picksData)
+    } catch (err) {
+      console.error('Failed to fetch everyone\'s picks:', err)
+    }
+  }
+
   const fetchUnderdogTeams = async (week: number) => {
     try {
       const underdogs = await apiCall(`/admin/underdog-teams/${week}`)
@@ -258,6 +280,7 @@ function App() {
     localStorage.removeItem('token')
     setMyPlayers([])
     setLeaderboard([])
+    setEveryonesPicks([])
   }
 
   const resetPassword = async (e: React.FormEvent) => {
@@ -306,6 +329,7 @@ function App() {
       setSuccess('Player entry created successfully!')
       fetchUserData()
       fetchLeaderboard()
+      fetchEveryonesPicks()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create player')
     } finally {
@@ -330,6 +354,7 @@ function App() {
       fetchCurrentPicks(selectedPlayer)
       fetchUserData()
       fetchLeaderboard()
+      fetchEveryonesPicks()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit pick')
     } finally {
@@ -433,6 +458,7 @@ function App() {
       
       setMyPlayers([])
       setLeaderboard([])
+      setEveryonesPicks([])
       setGameResults([])
       setUnderdogTeams([])
       setTeamResults({})
@@ -441,6 +467,7 @@ function App() {
       
       fetchGameSettings()
       fetchLeaderboard()
+      fetchEveryonesPicks()
     } catch (err: any) {
       setError(err.message || 'Failed to reset league')
     } finally {
@@ -470,6 +497,7 @@ function App() {
       
       await fetchGameSettings()
       await fetchLeaderboard()
+      await fetchEveryonesPicks()
       await fetchUnderdogTeams((gameSettings?.current_week || 1) + 1)
       await fetchGameResults()
     } catch (err: any) {
@@ -499,6 +527,8 @@ function App() {
       }
       
       await fetchGameSettings()
+      await fetchLeaderboard()
+      await fetchEveryonesPicks()
       await fetchUnderdogTeams(gameSettings?.current_week || 1)
       await fetchGameResults()
     } catch (err: any) {
@@ -533,6 +563,7 @@ function App() {
       setSelectedPlayer('')
       fetchCurrentPicks(selectedPlayer)
       fetchLeaderboard()
+      fetchEveryonesPicks()
     } catch (err: any) {
       setError(err.message || 'Failed to submit redemption picks')
     } finally {
@@ -576,6 +607,7 @@ function App() {
       fetchCurrentPicks(selectedPlayer)
       fetchUserData()
       fetchLeaderboard()
+      fetchEveryonesPicks()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update pick')
     } finally {
@@ -598,6 +630,7 @@ function App() {
       fetchCurrentPicks(selectedPlayer)
       fetchUserData()
       fetchLeaderboard()
+      fetchEveryonesPicks()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete pick')
     } finally {
@@ -846,10 +879,11 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="picks">Make Picks</TabsTrigger>
             <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+            <TabsTrigger value="everyone-picks">Everyone's Picks</TabsTrigger>
             <TabsTrigger value="pot-tracker">Pot Tracker</TabsTrigger>
             {user.role === 'admin' && <TabsTrigger value="admin">Admin</TabsTrigger>}
           </TabsList>
@@ -1133,6 +1167,56 @@ function App() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="everyone-picks" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Everyone's Picks</CardTitle>
+                <CardDescription>All locked picks from past weeks and current week (if locked)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {everyonesPicks.length > 0 ? (
+                  <div className="border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Week</TableHead>
+                          <TableHead>Player</TableHead>
+                          <TableHead>Username</TableHead>
+                          <TableHead>Team</TableHead>
+                          <TableHead>Type</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {everyonesPicks.map((pick) => (
+                          <TableRow key={pick.pick_id}>
+                            <TableCell className="font-medium">{pick.week}</TableCell>
+                            <TableCell>{pick.player_name}</TableCell>
+                            <TableCell className="text-gray-600">@{pick.username}</TableCell>
+                            <TableCell className="font-medium">{pick.team}</TableCell>
+                            <TableCell>
+                              {pick.is_redemption ? (
+                                <Badge variant="destructive">Redemption</Badge>
+                              ) : pick.is_underdog ? (
+                                <Badge variant="secondary">Underdog</Badge>
+                              ) : (
+                                <Badge variant="default">Regular</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-gray-500 text-lg">No locked picks yet</div>
+                    <div className="text-sm text-gray-400 mt-2">Picks will appear here once they are locked</div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

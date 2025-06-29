@@ -490,6 +490,32 @@ async def get_leaderboard():
     
     return standings
 
+@app.get("/picks/locked")
+async def get_locked_picks():
+    """Get all picks that are locked (from past weeks or current week if locked)"""
+    current_week = game_settings.current_week
+    locked_picks = []
+    
+    for pick in picks_db:
+        if pick.week < current_week or (pick.week == current_week and game_settings.picks_locked):
+            player = players_db.get(pick.player_id)
+            if player:
+                user = users_db.get(player.user_id)
+                if user:
+                    locked_picks.append({
+                        "pick_id": pick.id,
+                        "week": pick.week,
+                        "team": pick.team,
+                        "player_name": player.entry_name,
+                        "username": user.username,
+                        "is_redemption": pick.is_redemption,
+                        "is_underdog": pick.is_underdog,
+                        "created_at": pick.created_at.isoformat()
+                    })
+    
+    locked_picks.sort(key=lambda x: (-x["week"], x["player_name"]))
+    return locked_picks
+
 @app.post("/admin/record-result")
 async def record_game_result(request: RecordResultRequest, admin: User = Depends(require_admin)):
     if request.team not in NFL_TEAMS:
