@@ -1221,56 +1221,6 @@ function App() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="everyone-picks" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Everyone's Picks</CardTitle>
-                <CardDescription>All locked picks from past weeks and current week (if locked)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {everyonesPicks.length > 0 ? (
-                  <div className="border rounded-lg">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Week</TableHead>
-                          <TableHead>Player</TableHead>
-                          <TableHead>Username</TableHead>
-                          <TableHead>Team</TableHead>
-                          <TableHead>Type</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {everyonesPicks.map((pick) => (
-                          <TableRow key={pick.pick_id}>
-                            <TableCell className="font-medium">{pick.week}</TableCell>
-                            <TableCell>{pick.player_name}</TableCell>
-                            <TableCell className="text-gray-600">@{pick.username}</TableCell>
-                            <TableCell className="font-medium">{pick.team}</TableCell>
-                            <TableCell>
-                              {pick.is_redemption ? (
-                                <Badge variant="destructive">Redemption</Badge>
-                              ) : pick.is_underdog ? (
-                                <Badge variant="secondary">Underdog</Badge>
-                              ) : (
-                                <Badge variant="default">Regular</Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="text-gray-500 text-lg">No locked picks yet</div>
-                    <div className="text-sm text-gray-400 mt-2">Picks will appear here once they are locked</div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           <TabsContent value="pot-tracker" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
