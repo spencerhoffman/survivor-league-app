@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://app-xieyxwel.fly.dev'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 interface User {
   id: string
