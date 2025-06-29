@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from datetime import datetime, date
@@ -9,6 +10,8 @@ import uuid
 import jwt
 import hashlib
 import os
+import shutil
+from pathlib import Path
 
 app = FastAPI(title="Survivor League API")
 
@@ -40,6 +43,7 @@ class User(BaseModel):
     password_hash: str
     role: UserRole = UserRole.PLAYER
     created_at: datetime
+    profile_picture_url: Optional[str] = None
 
 class Player(BaseModel):
     id: str
@@ -111,6 +115,21 @@ class ResetPasswordRequest(BaseModel):
     email: str
     new_password: str
 
+class UpdateGameSettingsRequest(BaseModel):
+    entry_fee: Optional[int] = None
+    buyback_multiplier: Optional[int] = None
+
+class UpdateUserRoleRequest(BaseModel):
+    user_id: str
+    role: UserRole
+
+class UpdateTeamsRequest(BaseModel):
+    teams: List[str]
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+MAX_FILE_SIZE = 5 * 1024 * 1024
 users_db: Dict[str, User] = {}
 players_db: Dict[str, Player] = {}
 picks_db: List[WeeklyPick] = []
@@ -125,11 +144,27 @@ NFL_TEAMS = [
     "TEN", "WSH"
 ]
 
+def validate_image_file(file: UploadFile) -> None:
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.")
+
+def save_profile_picture(file: UploadFile, user_id: str) -> str:
+    validate_image_file(file)
+    
+    file_extension = file.filename.split('.')[-1] if file.filename else 'jpg'
+    filename = f"{user_id}_profile.{file_extension}"
+    file_path = UPLOAD_DIR / filename
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return f"/uploads/{filename}"
+
 admin_id = str(uuid.uuid4())
 admin_user = User(
     id=admin_id,
-    username="admin",
-    email="admin@example.com",
+    username="Spence",
+    email="spencerhhoffman@gmail.com",
     password_hash=hashlib.sha256(os.getenv("ADMIN_PASSWORD", "admin123").encode()).hexdigest(),
     role=UserRole.ADMIN,
     created_at=datetime.now()
@@ -167,23 +202,32 @@ async def healthz():
     return {"status": "ok"}
 
 @app.post("/auth/register")
-async def register(request: RegisterRequest):
+async def register(
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    profile_picture: UploadFile = File(...)
+):
     for user in users_db.values():
-        if user.username == request.username:
+        if user.username == username:
             raise HTTPException(status_code=400, detail="Username already exists")
     
     user_id = str(uuid.uuid4())
+    
+    profile_picture_url = save_profile_picture(profile_picture, user_id)
+    
     user = User(
         id=user_id,
-        username=request.username,
-        email=request.email,
-        password_hash=hash_password(request.password),
-        created_at=datetime.now()
+        username=username,
+        email=email,
+        password_hash=hash_password(password),
+        created_at=datetime.now(),
+        profile_picture_url=profile_picture_url
     )
     users_db[user_id] = user
     
     token = create_token(user_id)
-    return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role}}
+    return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role, "profile_picture_url": user.profile_picture_url}}
 
 @app.post("/auth/login")
 async def login(request: LoginRequest):
@@ -462,6 +506,43 @@ async def unlock_picks(admin: User = Depends(require_admin)):
 async def get_settings():
     return game_settings
 
+@app.put("/admin/settings")
+async def update_game_settings(request: UpdateGameSettingsRequest, admin: User = Depends(require_admin)):
+    if request.entry_fee is not None:
+        game_settings.entry_fee = request.entry_fee
+    if request.buyback_multiplier is not None:
+        game_settings.buyback_multiplier = request.buyback_multiplier
+    return game_settings
+
+@app.get("/admin/users")
+async def get_all_users(admin: User = Depends(require_admin)):
+    return [{"id": user.id, "username": user.username, "email": user.email, "role": user.role} 
+            for user in users_db.values()]
+
+@app.put("/admin/users/role")
+async def update_user_role(request: UpdateUserRoleRequest, admin: User = Depends(require_admin)):
+    if request.user_id not in users_db:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user = users_db[request.user_id]
+    user.role = request.role
+    users_db[request.user_id] = user
+    
+    return {"message": f"User {user.username} role updated to {request.role}"}
+
+@app.put("/admin/teams")
+async def update_teams(request: UpdateTeamsRequest, admin: User = Depends(require_admin)):
+    global NFL_TEAMS
+    if len(request.teams) == 0:
+        raise HTTPException(status_code=400, detail="Teams list cannot be empty")
+    
+    NFL_TEAMS = request.teams
+    return {"message": f"Teams updated successfully", "teams": NFL_TEAMS}
+
+@app.get("/admin/teams")
+async def get_teams_admin(admin: User = Depends(require_admin)):
+    return {"teams": NFL_TEAMS}
+
 @app.get("/leaderboard")
 async def get_leaderboard():
     standings = []
@@ -671,6 +752,13 @@ async def reset_league(admin: User = Depends(require_admin)):
             "picks_locked": game_settings.picks_locked
         }
     }
+
+@app.get("/uploads/{filename}")
+async def get_uploaded_file(filename: str):
+    file_path = UPLOAD_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
 
 @app.get("/teams")
 async def get_teams():
