@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Trophy, Users, Calendar, Settings, LogOut, Plus, AlertCircle } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://app-xieyxwel.fly.dev'
@@ -40,6 +41,7 @@ interface LeaderboardEntry {
   buybacks: number
   eliminated_week?: number
   financial_contribution: number
+  profile_picture_url?: string
 }
 
 interface PickEntry {
@@ -426,7 +428,7 @@ function App() {
 
   const recordTableGameResults = async () => {
     const teamsWithOutcomes = Object.entries(teamResults).filter(([_, outcome]) => outcome !== null)
-    
+
     if (teamsWithOutcomes.length === 0) {
       setError('Please select an outcome for at least one team')
       return
@@ -492,7 +494,7 @@ function App() {
         method: 'POST'
       })
       setSuccess('League reset successfully! All data has been cleared.')
-      
+
       setMyPlayers([])
       setLeaderboard([])
       setEveryonesPicks([])
@@ -501,7 +503,7 @@ function App() {
       setTeamResults({})
       setCurrentPicks([])
       setSelectedPlayer('')
-      
+
       fetchGameSettings()
       fetchLeaderboard()
       fetchEveryonesPicks()
@@ -522,16 +524,16 @@ function App() {
       const processResult = await apiCall('/admin/process-week-results', {
         method: 'POST'
       })
-      
+
       await apiCall('/admin/lock-picks', {
         method: 'POST'
       })
       await apiCall('/admin/advance-week', {
         method: 'POST'
       })
-      
+
       setSuccess(`Week processed successfully! ${processResult.total_eliminated} players eliminated. Picks locked and advanced to next week.`)
-      
+
       await fetchGameSettings()
       await fetchLeaderboard()
       await fetchEveryonesPicks()
@@ -554,7 +556,7 @@ function App() {
       await apiCall('/admin/unlock-picks', {
         method: 'POST'
       })
-      
+
       const currentWeek = gameSettings?.current_week || 1
       if (currentWeek > 1) {
         const newWeek = currentWeek - 1
@@ -562,7 +564,7 @@ function App() {
       } else {
         setSuccess('Picks unlocked. Already at week 1, cannot go to previous week.')
       }
-      
+
       await fetchGameSettings()
       await fetchLeaderboard()
       await fetchEveryonesPicks()
@@ -617,7 +619,7 @@ function App() {
       setCurrentPicks([])
       return
     }
-    
+
     try {
       const picks = await apiCall(`/players/${playerId}/picks/current-week`)
       setCurrentPicks(picks)
@@ -677,7 +679,7 @@ function App() {
 
   const handleBuyback = async (playerId: string) => {
     if (!gameSettings) return
-    
+
     try {
       setLoading(true)
       setError('')
@@ -698,7 +700,7 @@ function App() {
 
   const handleUndo = async (playerId: string) => {
     if (!gameSettings) return
-    
+
     try {
       setLoading(true)
       setError('')
@@ -830,8 +832,8 @@ function App() {
                       </Button>
                     </form>
                     <div className="text-center">
-                      <Button 
-                        variant="link" 
+                      <Button
+                        variant="link"
                         onClick={() => setShowResetPassword(true)}
                         className="text-sm text-blue-600 hover:text-blue-800"
                       >
@@ -881,8 +883,8 @@ function App() {
                       </Button>
                     </form>
                     <div className="text-center">
-                      <Button 
-                        variant="link" 
+                      <Button
+                        variant="link"
                         onClick={() => setShowResetPassword(false)}
                         className="text-sm text-gray-600 hover:text-gray-800"
                       >
@@ -1007,7 +1009,7 @@ function App() {
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="picks">Make Picks</TabsTrigger>
-            <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+            <TabsTrigger value="leaderboard">Sexy Sexy Visual Tracker</TabsTrigger>
             <TabsTrigger value="everyone-picks">Everyone's Picks</TabsTrigger>
             <TabsTrigger value="pot-tracker">Pot Tracker</TabsTrigger>
             {user.role === 'admin' && <TabsTrigger value="admin">Admin</TabsTrigger>}
@@ -1106,8 +1108,8 @@ function App() {
               <CardHeader>
                 <CardTitle>Make Your Pick - Week {gameSettings?.current_week}</CardTitle>
                 <CardDescription>
-                  {gameSettings?.picks_locked 
-                    ? 'Picks are currently locked' 
+                  {gameSettings?.picks_locked
+                    ? 'Picks are currently locked'
                     : 'Select a team you think will win this week'}
                 </CardDescription>
               </CardHeader>
@@ -1145,16 +1147,16 @@ function App() {
                                 <div className="flex space-x-2">
                                   {editingPick === pick.id ? (
                                     <div className="flex items-center space-x-2">
-                                      <Select 
-                                        value={pick.team} 
+                                      <Select
+                                        value={pick.team}
                                         onValueChange={(team) => updatePick(pick.id, team, pick.is_underdog)}
                                       >
                                         <SelectTrigger className="w-32">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          {teams.filter(team => 
-                                            team === pick.team || 
+                                          {teams.filter(team =>
+                                            team === pick.team ||
                                             !currentPicks.some(p => p.id !== pick.id && p.team === team)
                                           ).map((team) => (
                                             <SelectItem key={team} value={team}>{team}</SelectItem>
@@ -1195,7 +1197,7 @@ function App() {
                           <strong>Redemption Round:</strong> You must select 2 different underdog teams to continue.
                         </AlertDescription>
                       </Alert>
-                      
+
                       <div className="space-y-2">
                         <Label>First Underdog Team</Label>
                         <Select value={redemptionPicks.underdogTeam1} onValueChange={(value) => setRedemptionPicks(prev => ({ ...prev, underdogTeam1: value }))}>
@@ -1225,8 +1227,8 @@ function App() {
                       </div>
 
 
-                      <Button 
-                        onClick={makeRedemptionPicks} 
+                      <Button
+                        onClick={makeRedemptionPicks}
                         disabled={loading || !redemptionPicks.underdogTeam1 || !redemptionPicks.underdogTeam2 || gameSettings?.picks_locked}
                         className="w-full"
                       >
@@ -1251,8 +1253,8 @@ function App() {
                         </Select>
                       </div>
 
-                      <Button 
-                        onClick={makePick} 
+                      <Button
+                        onClick={makePick}
                         disabled={loading || !selectedPlayer || !selectedTeam || gameSettings?.picks_locked}
                         className="w-full"
                       >
@@ -1268,29 +1270,104 @@ function App() {
           <TabsContent value="leaderboard" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Leaderboard</CardTitle>
+                <CardTitle>Sexy Sexy Visual Tracker</CardTitle>
                 <CardDescription>Current standings and elimination status</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {leaderboard.map((entry, index) => (
-                    <div key={entry.player_id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <span className="font-bold text-lg w-8">#{index + 1}</span>
-                        <div>
-                          <div className="font-medium">{entry.entry_name}</div>
-                          <div className="text-sm text-gray-600">@{entry.username}</div>
-                        </div>
-                        {getStatusBadge(entry.status)}
-                      </div>
-                      <div className="text-right text-sm">
-                        <div>Weeks: {entry.weeks_survived}</div>
-                        <div className="text-gray-600">
-                          R: {entry.redemption_visits} | B: {entry.buybacks}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <div className="min-w-max">
+                    {(() => {
+                      const getPlayerInitials = (entry: LeaderboardEntry): string => {
+                        return entry.entry_name
+                          .split(' ')
+                          .map(name => name.charAt(0).toUpperCase())
+                          .join('')
+                          .slice(0, 2);
+                      };
+
+                      const getPlayerStatusForWeek = (entry: LeaderboardEntry, week: number): string => {
+                        if (week > (gameSettings?.current_week || 1)) return 'not-started';
+                        if (entry.eliminated_week && week > entry.eliminated_week) return 'eliminated';
+                        if (entry.eliminated_week && week === entry.eliminated_week) {
+                          return entry.status === 'redemption' ? 'redemption' : 'eliminated';
+                        }
+                        if (week <= entry.weeks_survived) return 'active';
+                        return 'not-started';
+                      };
+
+                      const maxWeeks = Math.max(
+                        gameSettings?.current_week || 1,
+                        ...leaderboard.map(entry => entry.weeks_survived || 0),
+                        ...leaderboard.map(entry => entry.eliminated_week || 0)
+                      );
+
+                      return (
+                        <>
+                          <div className="flex mb-4">
+                            <div className="w-32 flex-shrink-0 text-sm font-medium">Players</div>
+                            {Array.from({ length: maxWeeks }, (_, i) => i + 1).map(week => (
+                              <div key={week} className="w-16 text-center font-medium text-sm">
+                                Week {week}
+                              </div>
+                            ))}
+                          </div>
+
+                          {leaderboard.map((entry) => (
+                            <div key={entry.player_id} className="flex items-center mb-2">
+                              <div className="w-32 flex-shrink-0 pr-4">
+                                <div className="flex items-center space-x-2">
+                                  <Avatar className="h-8 w-8">
+                                    {entry.profile_picture_url && (
+                                      <AvatarImage 
+                                        src={`${API_URL}${entry.profile_picture_url}`} 
+                                        alt={entry.entry_name}
+                                      />
+                                    )}
+                                    <AvatarFallback className="text-xs">
+                                      {getPlayerInitials(entry)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium truncate">{entry.entry_name}</div>
+                                    <div className="text-xs text-gray-600 truncate">@{entry.username}</div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {Array.from({ length: maxWeeks }, (_, i) => i + 1).map(week => {
+                                const status = getPlayerStatusForWeek(entry, week);
+                                return (
+                                  <div key={week} className="w-16 flex justify-center">
+                                    {week <= (gameSettings?.current_week || 1) && (
+                                      <Avatar className={`h-10 w-10 ${
+                                        status === 'active' ? 'ring-2 ring-green-500' :
+                                        status === 'eliminated' ? 'ring-2 ring-red-500' :
+                                        status === 'redemption' ? 'ring-2 ring-yellow-500' : ''
+                                      }`}>
+                                        {entry.profile_picture_url && (
+                                          <AvatarImage 
+                                            src={`${API_URL}${entry.profile_picture_url}`} 
+                                            alt={entry.entry_name}
+                                          />
+                                        )}
+                                        <AvatarFallback className={`text-xs ${
+                                          status === 'active' ? 'bg-green-100 text-green-800' :
+                                          status === 'eliminated' ? 'bg-red-100 text-red-800' :
+                                          status === 'redemption' ? 'bg-yellow-100 text-yellow-800' : ''
+                                        }`}>
+                                          {getPlayerInitials(entry)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1620,15 +1697,15 @@ function App() {
                             </div>
                           </div>
                           <div className="flex space-x-4">
-                            <Button 
-                              onClick={lockPicksAndAdvanceWeek} 
+                            <Button
+                              onClick={lockPicksAndAdvanceWeek}
                               disabled={loading}
                               className="bg-green-600 hover:bg-green-700"
                             >
                               {loading ? 'Processing...' : 'Lock Picks and Advance Week'}
                             </Button>
-                            <Button 
-                              onClick={unlockPicksAndReturnToPreviousWeek} 
+                            <Button
+                              onClick={unlockPicksAndReturnToPreviousWeek}
                               disabled={loading || (gameSettings?.current_week || 1) <= 1}
                               variant="outline"
                               className="border-orange-300 text-orange-700 hover:bg-orange-50"
@@ -1675,7 +1752,7 @@ function App() {
                       <Button onClick={saveUnderdogTeams} disabled={loading}>
                         Save Underdog Teams
                       </Button>
-                      
+
                       {underdogTeams.length > 0 && (
                         <div className="space-y-2">
                           <Label>Current Underdog Teams (Week {gameSettings?.current_week})</Label>
@@ -1695,12 +1772,12 @@ function App() {
                         <div className="space-y-2">
                           <h4 className="font-medium text-red-800">Reset Entire League</h4>
                           <p className="text-sm text-red-700">
-                            This will permanently delete all players, picks, game results, underdog teams, and non-admin users. 
+                            This will permanently delete all players, picks, game results, underdog teams, and non-admin users.
                             The league will be reset to Week 1 with default settings.
                           </p>
-                          <Button 
-                            variant="destructive" 
-                            onClick={resetLeague} 
+                          <Button
+                            variant="destructive"
+                            onClick={resetLeague}
                             disabled={loading}
                             className="mt-2"
                           >

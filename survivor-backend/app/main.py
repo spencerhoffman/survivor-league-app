@@ -559,7 +559,8 @@ async def get_leaderboard():
             "redemption_visits": player.redemption_visits,
             "buybacks": player.buybacks,
             "eliminated_week": player.eliminated_week,
-            "financial_contribution": player.financial_contribution
+            "financial_contribution": player.financial_contribution,
+            "profile_picture_url": user.profile_picture_url
         })
     
     standings.sort(key=lambda x: (
