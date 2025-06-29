@@ -1009,7 +1009,7 @@ function App() {
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="picks">Make Picks</TabsTrigger>
-            <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+            <TabsTrigger value="leaderboard">Sexy Sexy Visual Tracker</TabsTrigger>
             <TabsTrigger value="everyone-picks">Everyone's Picks</TabsTrigger>
             <TabsTrigger value="pot-tracker">Pot Tracker</TabsTrigger>
             {user.role === 'admin' && <TabsTrigger value="admin">Admin</TabsTrigger>}
