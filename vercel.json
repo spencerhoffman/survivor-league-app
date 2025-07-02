@@ -1,17 +1,5 @@
 {
   "version": 2,
-  "projects": [
-    {
-      "name": "survivor-league-frontend",
-      "source": "survivor-frontend",
-      "framework": "vite"
-    },
-    {
-      "name": "survivor-league-backend", 
-      "source": "survivor-backend",
-      "runtime": "python3.9"
-    }
-  ],
   "github": {
     "silent": true
   }
