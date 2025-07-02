@@ -26,13 +26,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Survivor League API", lifespan=lifespan)
 
-# Disable CORS. Do not remove this for full-stack development.
+allowed_origins = ["*"]  # Default for development
+if os.getenv("ENVIRONMENT") == "production":
+    allowed_origins = [
+        "https://*.vercel.app",
+        "https://survivor-league-app.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5173"
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "development-key-only")
@@ -90,7 +98,7 @@ class UpdatePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path("/tmp/uploads") if os.getenv("VERCEL") else Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 MAX_FILE_SIZE = 5 * 1024 * 1024
