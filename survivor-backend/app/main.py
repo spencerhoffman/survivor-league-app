@@ -30,7 +30,7 @@ app = FastAPI(title="Survivor League API", lifespan=lifespan)
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*", "https://repo-checker-app-pyzo0wl5.devinapps.com"],  # Allows all origins and explicit frontend
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicit methods
     allow_headers=["*"],  # Allows all headers
