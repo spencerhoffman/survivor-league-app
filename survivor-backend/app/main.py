@@ -13,9 +13,9 @@ import os
 import shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
-from database import db
-from services import UserService, PlayerService, PickService, GameResultService, UnderdogService, GameSettingsService
-from models import User, Player, WeeklyPick, UnderdogTeam, GameResult, GameSettings, UserRole, PlayerStatus
+from app.database import db
+from app.services import UserService, PlayerService, PickService, GameResultService, UnderdogService, GameSettingsService
+from app.models import User, Player, WeeklyPick, UnderdogTeam, GameResult, GameSettings, UserRole, PlayerStatus
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

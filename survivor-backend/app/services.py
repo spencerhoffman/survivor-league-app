@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
-from database import db
-from models import User, Player, WeeklyPick, UnderdogTeam, GameResult, GameSettings, UserRole, PlayerStatus
+from app.database import db
+from app.models import User, Player, WeeklyPick, UnderdogTeam, GameResult, GameSettings, UserRole, PlayerStatus
 from datetime import datetime
 import uuid
 
