@@ -170,7 +170,8 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok"}
+    db_status = "connected" if db.db_available else "unavailable"
+    return {"status": "ok", "database": db_status}
 
 @app.post("/auth/register")
 async def register(
