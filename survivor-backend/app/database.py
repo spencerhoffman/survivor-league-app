@@ -111,6 +111,6 @@ class Database:
                 await conn.commit()
         except Exception as e:
             logging.warning(f"Failed to create database tables: {e}")
-            raise
+            self.db_available = False
 
 db = Database()
