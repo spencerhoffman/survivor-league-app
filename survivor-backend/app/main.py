@@ -11,6 +11,7 @@ import jwt
 import hashlib
 import os
 import shutil
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 from app.database import db
@@ -120,26 +121,33 @@ def save_profile_picture(file: UploadFile, user_id: str) -> str:
 
 async def initialize_admin_user():
     """Initialize admin user in database if not exists"""
-    async with db.get_connection() as conn:
-        result = await conn.execute(
-            "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
-        )
-        admin_exists = await result.fetchone()
+    if not db.db_available:
+        logging.warning("Database not available - skipping admin user initialization")
+        return
         
-        if not admin_exists:
-            admin_id = str(uuid.uuid4())
-            await conn.execute("""
-                INSERT INTO users (id, username, email, password_hash, role, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                admin_id,
-                "Spence", 
-                "spencerhhoffman@gmail.com",
-                hashlib.sha256(os.getenv("ADMIN_PASSWORD", "admin123").encode()).hexdigest(),
-                "admin",
-                datetime.now()
-            ))
-            await conn.commit()
+    try:
+        async with db.get_connection() as conn:
+            result = await conn.execute(
+                "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
+            )
+            admin_exists = await result.fetchone()
+            
+            if not admin_exists:
+                admin_id = str(uuid.uuid4())
+                await conn.execute("""
+                    INSERT INTO users (id, username, email, password_hash, role, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    admin_id,
+                    "Spence", 
+                    "spencerhhoffman@gmail.com",
+                    hashlib.sha256(os.getenv("ADMIN_PASSWORD", "admin123").encode()).hexdigest(),
+                    "admin",
+                    datetime.now()
+                ))
+                await conn.commit()
+    except Exception as e:
+        logging.warning(f"Failed to initialize admin user: {e}")
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
