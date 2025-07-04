@@ -1,0 +1,164 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "survivor-frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/**/*.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/healthz",
+      "dest": "/api/healthz.py"
+    },
+    {
+      "src": "/api/auth/register",
+      "dest": "/api/auth/register.py"
+    },
+    {
+      "src": "/api/auth/login",
+      "dest": "/api/auth/login.py"
+    },
+    {
+      "src": "/api/auth/reset-password",
+      "dest": "/api/auth/reset-password.py"
+    },
+    {
+      "src": "/api/me",
+      "dest": "/api/me/index.py"
+    },
+    {
+      "src": "/api/me/password",
+      "dest": "/api/me/password.py"
+    },
+    {
+      "src": "/api/me/profile-picture",
+      "dest": "/api/me/profile-picture.py"
+    },
+    {
+      "src": "/api/players",
+      "dest": "/api/players/index.py"
+    },
+    {
+      "src": "/api/players/me",
+      "dest": "/api/players/me.py"
+    },
+    {
+      "src": "/api/players/([^/]+)/picks",
+      "dest": "/api/players/[player_id]/picks/index.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/picks/current-week",
+      "dest": "/api/players/[player_id]/picks/current-week.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/picks/([^/]+)",
+      "dest": "/api/players/[player_id]/picks/[pick_id].py?player_id=$1&pick_id=$2"
+    },
+    {
+      "src": "/api/players/([^/]+)/redemption-picks",
+      "dest": "/api/players/[player_id]/redemption-picks.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/buyback",
+      "dest": "/api/players/[player_id]/buyback.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/undo",
+      "dest": "/api/players/[player_id]/undo.py?player_id=$1"
+    },
+    {
+      "src": "/api/admin/settings",
+      "dest": "/api/admin/settings.py"
+    },
+    {
+      "src": "/api/admin/users",
+      "dest": "/api/admin/users.py"
+    },
+    {
+      "src": "/api/admin/users/role",
+      "dest": "/api/admin/users/role.py"
+    },
+    {
+      "src": "/api/admin/teams",
+      "dest": "/api/admin/teams.py"
+    },
+    {
+      "src": "/api/admin/underdog-teams",
+      "dest": "/api/admin/underdog-teams.py"
+    },
+    {
+      "src": "/api/admin/underdog-teams/([^/]+)",
+      "dest": "/api/admin/underdog-teams/[week].py?week=$1"
+    },
+    {
+      "src": "/api/admin/eliminate-player",
+      "dest": "/api/admin/eliminate-player.py"
+    },
+    {
+      "src": "/api/admin/advance-week",
+      "dest": "/api/admin/advance-week.py"
+    },
+    {
+      "src": "/api/admin/lock-picks",
+      "dest": "/api/admin/lock-picks.py"
+    },
+    {
+      "src": "/api/admin/unlock-picks",
+      "dest": "/api/admin/unlock-picks.py"
+    },
+    {
+      "src": "/api/admin/record-result",
+      "dest": "/api/admin/record-result.py"
+    },
+    {
+      "src": "/api/admin/process-week-results",
+      "dest": "/api/admin/process-week-results.py"
+    },
+    {
+      "src": "/api/admin/game-results",
+      "dest": "/api/admin/game-results.py"
+    },
+    {
+      "src": "/api/admin/game-results/([^/]+)",
+      "dest": "/api/admin/game-results/[week].py?week=$1"
+    },
+    {
+      "src": "/api/admin/reset-league",
+      "dest": "/api/admin/reset-league.py"
+    },
+    {
+      "src": "/api/leaderboard",
+      "dest": "/api/leaderboard.py"
+    },
+    {
+      "src": "/api/picks/locked",
+      "dest": "/api/picks/locked.py"
+    },
+    {
+      "src": "/api/teams",
+      "dest": "/api/teams.py"
+    },
+    {
+      "src": "/api/uploads/([^/]+)",
+      "dest": "/api/uploads/[filename].py?filename=$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/survivor-frontend/$1"
+    }
+  ],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET_KEY": "@jwt_secret_key",
+    "ADMIN_PASSWORD": "@admin_password",
+    "BLOB_READ_WRITE_TOKEN": "@blob_read_write_token"
+  }
+}
