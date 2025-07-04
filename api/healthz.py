@@ -1,11 +1,11 @@
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from http.server import BaseHTTPRequestHandler
+import json
 
-app = FastAPI()
-
-@app.get("/")
-async def healthz():
-    return JSONResponse({"status": "ok"})
-
-def handler(request):
-    return app(request)
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        response = json.dumps({"status": "ok"})
+        self.wfile.write(response.encode('utf-8'))

@@ -1,17 +1,41 @@
-from fastapi import FastAPI, Depends
-from fastapi.responses import JSONResponse
-import sys
+from http.server import BaseHTTPRequestHandler
+import json
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
+import asyncio
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.database import get_players_by_user_id
-from utils.auth import get_current_user
+from utils.auth import verify_token
 
-app = FastAPI()
-
-@app.get("/")
-async def get_my_players(user: dict = Depends(get_current_user)):
-    players = await get_players_by_user_id(user['id'])
-    return JSONResponse(players)
-
-def handler(request):
-    return app(request)
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        try:
+            auth_header = self.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                self.send_error(401, "Authorization header required")
+                return
+            
+            token = auth_header.split(' ')[1]
+            user = verify_token(token)
+            if not user:
+                self.send_error(401, "Invalid token")
+                return
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self._get_my_players(user['id']))
+            loop.close()
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode('utf-8'))
+            
+        except Exception as e:
+            self.send_error(500, str(e))
+    
+    async def _get_my_players(self, user_id):
+        players = await get_players_by_user_id(user_id)
+        return players

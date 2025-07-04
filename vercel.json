@@ -75,80 +75,8 @@
       "dest": "/api/players/[player_id]/undo.py?player_id=$1"
     },
     {
-      "src": "/api/admin/settings",
-      "dest": "/api/admin/settings.py"
-    },
-    {
-      "src": "/api/admin/users",
-      "dest": "/api/admin/users.py"
-    },
-    {
-      "src": "/api/admin/users/role",
-      "dest": "/api/admin/users/role.py"
-    },
-    {
-      "src": "/api/admin/teams",
-      "dest": "/api/admin/teams.py"
-    },
-    {
-      "src": "/api/admin/underdog-teams",
-      "dest": "/api/admin/underdog-teams.py"
-    },
-    {
-      "src": "/api/admin/underdog-teams/([^/]+)",
-      "dest": "/api/admin/underdog-teams/[week].py?week=$1"
-    },
-    {
-      "src": "/api/admin/eliminate-player",
-      "dest": "/api/admin/eliminate-player.py"
-    },
-    {
-      "src": "/api/admin/advance-week",
-      "dest": "/api/admin/advance-week.py"
-    },
-    {
-      "src": "/api/admin/lock-picks",
-      "dest": "/api/admin/lock-picks.py"
-    },
-    {
-      "src": "/api/admin/unlock-picks",
-      "dest": "/api/admin/unlock-picks.py"
-    },
-    {
-      "src": "/api/admin/record-result",
-      "dest": "/api/admin/record-result.py"
-    },
-    {
-      "src": "/api/admin/process-week-results",
-      "dest": "/api/admin/process-week-results.py"
-    },
-    {
-      "src": "/api/admin/game-results",
-      "dest": "/api/admin/game-results.py"
-    },
-    {
-      "src": "/api/admin/game-results/([^/]+)",
-      "dest": "/api/admin/game-results/[week].py?week=$1"
-    },
-    {
-      "src": "/api/admin/reset-league",
-      "dest": "/api/admin/reset-league.py"
-    },
-    {
-      "src": "/api/leaderboard",
-      "dest": "/api/leaderboard.py"
-    },
-    {
-      "src": "/api/picks/locked",
-      "dest": "/api/picks/locked.py"
-    },
-    {
       "src": "/api/teams",
       "dest": "/api/teams.py"
-    },
-    {
-      "src": "/api/uploads/([^/]+)",
-      "dest": "/api/uploads/[filename].py?filename=$1"
     },
     {
       "src": "/(.*)",
