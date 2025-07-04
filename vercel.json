@@ -1,0 +1,92 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "survivor-frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/**/*.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/healthz",
+      "dest": "/api/healthz.py"
+    },
+    {
+      "src": "/api/auth/register",
+      "dest": "/api/auth/register.py"
+    },
+    {
+      "src": "/api/auth/login",
+      "dest": "/api/auth/login.py"
+    },
+    {
+      "src": "/api/auth/reset-password",
+      "dest": "/api/auth/reset-password.py"
+    },
+    {
+      "src": "/api/me",
+      "dest": "/api/me/index.py"
+    },
+    {
+      "src": "/api/me/password",
+      "dest": "/api/me/password.py"
+    },
+    {
+      "src": "/api/me/profile-picture",
+      "dest": "/api/me/profile-picture.py"
+    },
+    {
+      "src": "/api/players",
+      "dest": "/api/players/index.py"
+    },
+    {
+      "src": "/api/players/me",
+      "dest": "/api/players/me.py"
+    },
+    {
+      "src": "/api/players/([^/]+)/picks",
+      "dest": "/api/players/[player_id]/picks/index.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/picks/current-week",
+      "dest": "/api/players/[player_id]/picks/current-week.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/picks/([^/]+)",
+      "dest": "/api/players/[player_id]/picks/[pick_id].py?player_id=$1&pick_id=$2"
+    },
+    {
+      "src": "/api/players/([^/]+)/redemption-picks",
+      "dest": "/api/players/[player_id]/redemption-picks.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/buyback",
+      "dest": "/api/players/[player_id]/buyback.py?player_id=$1"
+    },
+    {
+      "src": "/api/players/([^/]+)/undo",
+      "dest": "/api/players/[player_id]/undo.py?player_id=$1"
+    },
+    {
+      "src": "/api/teams",
+      "dest": "/api/teams.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/survivor-frontend/$1"
+    }
+  ],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET_KEY": "@jwt_secret_key",
+    "ADMIN_PASSWORD": "@admin_password",
+    "BLOB_READ_WRITE_TOKEN": "@blob_read_write_token"
+  }
+}
