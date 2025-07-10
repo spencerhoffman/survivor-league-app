@@ -135,6 +135,7 @@ export default function LoginPage() {
                     type="text"
                     value={loginForm.username}
                     onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                    autoComplete="username"
                     required
                   />
                 </div>
@@ -145,6 +146,7 @@ export default function LoginPage() {
                     type="password"
                     value={loginForm.password}
                     onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                    autoComplete="current-password"
                     required
                   />
                 </div>
