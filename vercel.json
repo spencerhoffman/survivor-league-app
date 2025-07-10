@@ -1,6 +1,0 @@
-{
-  "buildCommand": "cd survivor-league-nextjs && npm run build",
-  "installCommand": "cd survivor-league-nextjs && npm install",
-  "framework": "nextjs",
-  "rootDirectory": "survivor-league-nextjs"
-}
