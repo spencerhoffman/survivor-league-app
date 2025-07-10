@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { sql } from '@vercel/postgres'
+import { pool } from '@/lib/database'
 import { v4 as uuidv4 } from 'uuid'
+
+export const runtime = 'nodejs'
 
 export async function POST(
   request: NextRequest,
@@ -13,7 +15,7 @@ export async function POST(
     const params = await context.params
     const playerId = params.id
 
-    const playerResult = await sql`SELECT * FROM players WHERE id = ${playerId}`
+    const playerResult = await pool.query('SELECT * FROM players WHERE id = $1', [playerId])
     if (playerResult.rows.length === 0) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 })
     }
@@ -27,13 +29,13 @@ export async function POST(
       return NextResponse.json({ error: 'Player not in redemption round' }, { status: 400 })
     }
 
-    const settingsResult = await sql`SELECT * FROM game_settings WHERE id = 1`
+    const settingsResult = await pool.query('SELECT * FROM game_settings WHERE id = 1')
     const settings = settingsResult.rows[0]
 
-    const existingPicksResult = await sql`
-      SELECT * FROM weekly_picks 
-      WHERE player_id = ${playerId} AND week = ${settings.current_week} AND is_redemption = true
-    `
+    const existingPicksResult = await pool.query(
+      'SELECT * FROM weekly_picks WHERE player_id = $1 AND week = $2 AND is_redemption = true',
+      [playerId, settings.current_week]
+    )
 
     if (existingPicksResult.rows.length > 0) {
       return NextResponse.json({ error: 'Redemption picks already submitted' }, { status: 400 })
@@ -48,11 +50,10 @@ export async function POST(
     const insertedPicks = []
     for (const pick of picks) {
       const pickId = uuidv4()
-      const result = await sql`
-        INSERT INTO weekly_picks (id, player_id, week, team, is_redemption, is_underdog)
-        VALUES (${pickId}, ${playerId}, ${settings.current_week}, ${pick.team}, true, ${pick.is_underdog})
-        RETURNING *
-      `
+      const result = await pool.query(
+        'INSERT INTO weekly_picks (id, player_id, week, team, is_redemption, is_underdog) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [pickId, playerId, settings.current_week, pick.team, true, pick.is_underdog]
+      )
       insertedPicks.push(result.rows[0])
     }
 

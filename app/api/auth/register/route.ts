@@ -4,6 +4,8 @@ import { hashPassword, createToken } from '@/lib/auth'
 import { UserRole } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()

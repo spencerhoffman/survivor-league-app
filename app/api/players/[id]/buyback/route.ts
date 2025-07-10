@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { sql } from '@vercel/postgres'
+import { pool } from '@/lib/database'
+
+export const runtime = 'nodejs'
 
 export async function POST(
   request: NextRequest,
@@ -12,7 +14,7 @@ export async function POST(
     const params = await context.params
     const playerId = params.id
 
-    const playerResult = await sql`SELECT * FROM players WHERE id = ${playerId}`
+    const playerResult = await pool.query('SELECT * FROM players WHERE id = $1', [playerId])
     if (playerResult.rows.length === 0) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 })
     }
@@ -26,16 +28,15 @@ export async function POST(
       return NextResponse.json({ error: 'Player not eliminated' }, { status: 400 })
     }
 
-    const settingsResult = await sql`SELECT * FROM game_settings WHERE id = 1`
+    const settingsResult = await pool.query('SELECT * FROM game_settings WHERE id = 1')
     const settings = settingsResult.rows[0]
     
     const cost = week * settings.buyback_multiplier
 
-    await sql`
-      UPDATE players 
-      SET status = 'active', buybacks = buybacks + 1, financial_contribution = financial_contribution + ${cost}
-      WHERE id = ${playerId}
-    `
+    await pool.query(
+      'UPDATE players SET status = $1, buybacks = buybacks + 1, financial_contribution = financial_contribution + $2 WHERE id = $3',
+      ['active', cost, playerId]
+    )
 
     return NextResponse.json({ 
       message: `Buyback successful for week ${week}`, 

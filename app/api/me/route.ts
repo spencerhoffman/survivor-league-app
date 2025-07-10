@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)

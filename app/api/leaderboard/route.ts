@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { pool } from '@/lib/database'
+
+export const runtime = 'nodejs'
 
 export async function GET() {
   try {
-    const result = await sql`
+    const result = await pool.query(`
       SELECT 
         p.id as player_id,
         p.entry_name,
@@ -18,7 +20,7 @@ export async function GET() {
       FROM players p
       JOIN users u ON p.user_id = u.id
       ORDER BY p.weeks_survived DESC, p.redemption_visits ASC, p.buybacks ASC
-    `
+    `)
     
     return NextResponse.json(result.rows)
   } catch (error) {

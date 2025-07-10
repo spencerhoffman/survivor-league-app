@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { sql } from '@vercel/postgres'
+import { pool } from '@/lib/database'
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin(request)
     
-    await sql`UPDATE game_settings SET picks_locked = false WHERE id = 1`
+    await pool.query('UPDATE game_settings SET picks_locked = false WHERE id = 1')
     
     return NextResponse.json({ message: 'Picks unlocked' })
   } catch (error) {

@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { sql } from '@vercel/postgres'
+import { pool } from '@/lib/database'
+
+export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     
-    const result = await sql`
-      SELECT * FROM players WHERE user_id = ${user.id} ORDER BY created_at DESC
-    `
+    const result = await pool.query(
+      'SELECT * FROM players WHERE user_id = $1 ORDER BY created_at DESC',
+      [user.id]
+    )
     
     return NextResponse.json(result.rows)
   } catch (error) {

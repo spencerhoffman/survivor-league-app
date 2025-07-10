@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { getGameSettings, updateGameSettings } from '@/lib/database'
 
+export const runtime = 'nodejs'
+
 export async function GET() {
   try {
     const settings = await getGameSettings()

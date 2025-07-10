@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { sql } from '@vercel/postgres'
+import { pool } from '@/lib/database'
 import { v4 as uuidv4 } from 'uuid'
+
+export const runtime = 'nodejs'
 
 export async function POST(
   request: NextRequest,
@@ -13,7 +15,7 @@ export async function POST(
     const params = await context.params
     const playerId = params.id
 
-    const playerResult = await sql`SELECT * FROM players WHERE id = ${playerId}`
+    const playerResult = await pool.query('SELECT * FROM players WHERE id = $1', [playerId])
     if (playerResult.rows.length === 0) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 })
     }
@@ -23,28 +25,27 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const settingsResult = await sql`SELECT * FROM game_settings WHERE id = 1`
+    const settingsResult = await pool.query('SELECT * FROM game_settings WHERE id = 1')
     const settings = settingsResult.rows[0]
 
     if (settings.picks_locked) {
       return NextResponse.json({ error: 'Picks are locked' }, { status: 400 })
     }
 
-    const existingPickResult = await sql`
-      SELECT * FROM weekly_picks 
-      WHERE player_id = ${playerId} AND week = ${settings.current_week}
-    `
+    const existingPickResult = await pool.query(
+      'SELECT * FROM weekly_picks WHERE player_id = $1 AND week = $2',
+      [playerId, settings.current_week]
+    )
 
     if (existingPickResult.rows.length > 0) {
       return NextResponse.json({ error: 'Pick already exists for this week' }, { status: 400 })
     }
 
     const pickId = uuidv4()
-    const result = await sql`
-      INSERT INTO weekly_picks (id, player_id, week, team, is_redemption, is_underdog)
-      VALUES (${pickId}, ${playerId}, ${settings.current_week}, ${team}, ${is_redemption}, ${is_underdog})
-      RETURNING *
-    `
+    const result = await pool.query(
+      'INSERT INTO weekly_picks (id, player_id, week, team, is_redemption, is_underdog) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [pickId, playerId, settings.current_week, team, is_redemption, is_underdog]
+    )
 
     return NextResponse.json(result.rows[0])
   } catch (error) {
@@ -61,9 +62,10 @@ export async function GET(
     const params = await context.params
     const playerId = params.id
     
-    const result = await sql`
-      SELECT * FROM weekly_picks WHERE player_id = ${playerId} ORDER BY week DESC
-    `
+    const result = await pool.query(
+      'SELECT * FROM weekly_picks WHERE player_id = $1 ORDER BY week DESC',
+      [playerId]
+    )
     
     return NextResponse.json(result.rows)
   } catch (error) {

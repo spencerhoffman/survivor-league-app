@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { pool } from '@/lib/database'
 import { hashPassword } from '@/lib/auth'
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,9 +12,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const result = await sql`
-      SELECT * FROM users WHERE username = ${username} AND email = ${email}
-    `
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND email = $2',
+      [username, email]
+    )
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
@@ -20,9 +23,10 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await hashPassword(newPassword)
     
-    await sql`
-      UPDATE users SET password_hash = ${passwordHash} WHERE username = ${username}
-    `
+    await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE username = $2',
+      [passwordHash, username]
+    )
 
     return NextResponse.json({ message: 'Password reset successfully' })
   } catch (error) {
