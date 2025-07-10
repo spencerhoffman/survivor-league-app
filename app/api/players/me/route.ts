@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { pool } from '@/lib/database'
+import { neon } from '@neondatabase/serverless'
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const runtime = 'nodejs'
 
@@ -8,12 +10,9 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     
-    const result = await pool.query(
-      'SELECT * FROM players WHERE user_id = $1 ORDER BY created_at DESC',
-      [user.id]
-    )
+    const result = await sql`SELECT * FROM players WHERE user_id = ${user.id} ORDER BY created_at DESC`
     
-    return NextResponse.json(result.rows)
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Get my players error:', error)
     return NextResponse.json({ error: 'Failed to get players' }, { status: 500 })

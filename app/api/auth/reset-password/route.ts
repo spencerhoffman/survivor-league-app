@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { pool } from '@/lib/database'
+import { neon } from '@neondatabase/serverless'
 import { hashPassword } from '@/lib/auth'
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const runtime = 'nodejs'
 
@@ -12,21 +14,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const result = await pool.query(
-      'SELECT * FROM users WHERE username = $1 AND email = $2',
-      [username, email]
-    )
+    const result = await sql`SELECT * FROM users WHERE username = ${username} AND email = ${email}`
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     const passwordHash = await hashPassword(newPassword)
     
-    await pool.query(
-      'UPDATE users SET password_hash = $1 WHERE username = $2',
-      [passwordHash, username]
-    )
+    await sql`UPDATE users SET password_hash = ${passwordHash} WHERE username = ${username}`
 
     return NextResponse.json({ message: 'Password reset successfully' })
   } catch (error) {

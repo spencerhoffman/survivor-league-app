@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { pool } from '@/lib/database'
+import { neon } from '@neondatabase/serverless'
 import { v4 as uuidv4 } from 'uuid'
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const runtime = 'nodejs'
 
@@ -15,12 +17,12 @@ export async function POST(
     const params = await context.params
     const playerId = params.id
 
-    const playerResult = await pool.query('SELECT * FROM players WHERE id = $1', [playerId])
-    if (playerResult.rows.length === 0) {
+    const playerResult = await sql`SELECT * FROM players WHERE id = ${playerId}`
+    if (playerResult.length === 0) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 })
     }
 
-    const player = playerResult.rows[0]
+    const player = playerResult[0]
     if (player.user_id !== user.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
@@ -29,15 +31,12 @@ export async function POST(
       return NextResponse.json({ error: 'Player not in redemption round' }, { status: 400 })
     }
 
-    const settingsResult = await pool.query('SELECT * FROM game_settings WHERE id = 1')
-    const settings = settingsResult.rows[0]
+    const settingsResult = await sql`SELECT * FROM game_settings WHERE id = 1`
+    const settings = settingsResult[0]
 
-    const existingPicksResult = await pool.query(
-      'SELECT * FROM weekly_picks WHERE player_id = $1 AND week = $2 AND is_redemption = true',
-      [playerId, settings.current_week]
-    )
+    const existingPicksResult = await sql`SELECT * FROM weekly_picks WHERE player_id = ${playerId} AND week = ${settings.current_week} AND is_redemption = true`
 
-    if (existingPicksResult.rows.length > 0) {
+    if (existingPicksResult.length > 0) {
       return NextResponse.json({ error: 'Redemption picks already submitted' }, { status: 400 })
     }
 
@@ -50,11 +49,8 @@ export async function POST(
     const insertedPicks = []
     for (const pick of picks) {
       const pickId = uuidv4()
-      const result = await pool.query(
-        'INSERT INTO weekly_picks (id, player_id, week, team, is_redemption, is_underdog) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [pickId, playerId, settings.current_week, pick.team, true, pick.is_underdog]
-      )
-      insertedPicks.push(result.rows[0])
+      const result = await sql`INSERT INTO weekly_picks (id, player_id, week, team, is_redemption, is_underdog) VALUES (${pickId}, ${playerId}, ${settings.current_week}, ${pick.team}, ${true}, ${pick.is_underdog}) RETURNING *`
+      insertedPicks.push(result[0])
     }
 
     return NextResponse.json(insertedPicks)

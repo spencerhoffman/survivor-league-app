@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { pool } from '@/lib/database'
+import { neon } from '@neondatabase/serverless'
 import { v4 as uuidv4 } from 'uuid'
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const runtime = 'nodejs'
 
@@ -14,28 +16,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Team and outcome are required' }, { status: 400 })
     }
 
-    const settingsResult = await pool.query('SELECT * FROM game_settings WHERE id = 1')
-    const settings = settingsResult.rows[0]
+    const settingsResult = await sql`SELECT * FROM game_settings WHERE id = 1`
+    const settings = settingsResult[0]
     const gameWeek = week || settings.current_week
 
-    const existingResult = await pool.query(
-      'SELECT * FROM game_results WHERE team = $1 AND week = $2',
-      [team, gameWeek]
-    )
+    const existingResult = await sql`SELECT * FROM game_results WHERE team = ${team} AND week = ${gameWeek}`
 
-    if (existingResult.rows.length > 0) {
-      await pool.query(
-        'UPDATE game_results SET outcome = $1 WHERE team = $2 AND week = $3 RETURNING *',
-        [outcome, team, gameWeek]
-      )
-      return NextResponse.json(existingResult.rows[0])
+    if (existingResult.length > 0) {
+      await sql`UPDATE game_results SET outcome = ${outcome} WHERE team = ${team} AND week = ${gameWeek} RETURNING *`
+      return NextResponse.json(existingResult[0])
     } else {
       const resultId = uuidv4()
-      const result = await pool.query(
-        'INSERT INTO game_results (id, week, team, outcome) VALUES ($1, $2, $3, $4) RETURNING *',
-        [resultId, gameWeek, team, outcome]
-      )
-      return NextResponse.json(result.rows[0])
+      const result = await sql`INSERT INTO game_results (id, week, team, outcome) VALUES (${resultId}, ${gameWeek}, ${team}, ${outcome}) RETURNING *`
+      return NextResponse.json(result[0])
     }
   } catch (error) {
     console.error('Record result error:', error)

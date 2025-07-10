@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
-import { pool } from '@/lib/database'
+import { neon } from '@neondatabase/serverless'
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const runtime = 'nodejs'
 
 export async function GET() {
   try {
-    const result = await pool.query(`
+    const result = await sql`
       SELECT 
         p.id as player_id,
         p.entry_name,
@@ -20,9 +22,9 @@ export async function GET() {
       FROM players p
       JOIN users u ON p.user_id = u.id
       ORDER BY p.weeks_survived DESC, p.redemption_visits ASC, p.buybacks ASC
-    `)
+    `
     
-    return NextResponse.json(result.rows)
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Get leaderboard error:', error)
     return NextResponse.json({ error: 'Failed to get leaderboard' }, { status: 500 })

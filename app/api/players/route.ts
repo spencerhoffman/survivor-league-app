@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { pool } from '@/lib/database'
+import { neon } from '@neondatabase/serverless'
 import { v4 as uuidv4 } from 'uuid'
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export const runtime = 'nodejs'
 
@@ -15,12 +17,13 @@ export async function POST(request: NextRequest) {
     }
 
     const playerId = uuidv4()
-    const result = await pool.query(
-      'INSERT INTO players (id, user_id, entry_name, status, weeks_survived, redemption_visits, buybacks, financial_contribution) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-      [playerId, user.id, entry_name, 'active', 0, 0, 0, 35]
-    )
+    const result = await sql`
+      INSERT INTO players (id, user_id, entry_name, status, weeks_survived, redemption_visits, buybacks, financial_contribution) 
+      VALUES (${playerId}, ${user.id}, ${entry_name}, ${'active'}, ${0}, ${0}, ${0}, ${35}) 
+      RETURNING *
+    `
 
-    return NextResponse.json(result.rows[0])
+    return NextResponse.json(result[0])
   } catch (error) {
     console.error('Create player error:', error)
     return NextResponse.json({ error: 'Failed to create player' }, { status: 500 })
@@ -29,8 +32,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const result = await pool.query('SELECT * FROM players ORDER BY created_at DESC')
-    return NextResponse.json(result.rows)
+    const result = await sql`SELECT * FROM players ORDER BY created_at DESC`
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Get players error:', error)
     return NextResponse.json({ error: 'Failed to get players' }, { status: 500 })
