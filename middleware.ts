@@ -15,7 +15,7 @@ function verifyTokenInMiddleware(token: string): { userId: string } | null {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith('/api/auth/')) {
+  if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/init-db')) {
     return NextResponse.next()
   }
 
