@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd survivor-league-nextjs && npm run build",
+  "outputDirectory": "survivor-league-nextjs/.next",
+  "installCommand": "cd survivor-league-nextjs && npm install",
+  "framework": "nextjs",
+  "functions": {
+    "survivor-league-nextjs/app/api/**/*.ts": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}
