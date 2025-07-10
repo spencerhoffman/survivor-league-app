@@ -2,7 +2,7 @@ import { createClient } from '@vercel/postgres'
 import { User, Player, WeeklyPick, GameResult, UnderdogTeam, GameSettings, UserRole, PlayerStatus } from '@/types'
 
 const client = createClient({
-  connectionString: process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL
 })
 
 export async function initializeDatabase() {
