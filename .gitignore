@@ -38,6 +38,7 @@ yarn-error.log*
 dist/
 build/
 *.egg-info/
+.next/
 
 # IDE
 .vscode/
